@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>R2 1:1 Upload Test</title>
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1438.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    <style>
+        body { font-family: -apple-system, sans-serif; margin: 0; padding: 20px; background: #EFEFEF; text-align: center; }
+        .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 16px; box-sizing: border-box; }
+        #image-container { width: 100%; margin-top: 20px; display: none; }
+        img { max-width: 100%; }
+        button { 
+            width: 100%; padding: 15px; margin-top: 10px; border: none; border-radius: 8px;
+            font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s;
+        }
+        button:active { opacity: 0.7; transform: scale(0.98); }
+        .btn-camera { background: #00E5FF; color: #111; }
+        .btn-upload { background: #111; color: #fff; display: none; }
+        #status { margin-top: 20px; font-size: 14px; color: #666; font-weight: bold; word-break: break-all; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h3>アプリ内 1:1撮影＆R2保存テスト</h3>
+    
+    <input type="text" id="management-code" placeholder="管理番号 (例: OM10001HG)" style="width:100%; padding:12px; border-radius:8px; border:1px solid #ccc; box-sizing:border-box; margin-bottom:15px; font-size:16px;">
+    
+    <button class="btn-camera" onclick="document.getElementById('file-input').click()">📷 カメラを起動 / 写真を選ぶ</button>
+    <input type="file" id="file-input" accept="image/*" capture="environment" style="display:none">
+
+    <div id="image-container">
+        <img id="image">
+        <button id="upload-btn" class="btn-upload" onclick="uploadImage()">✂️ 1:1で切り抜いて R2 へ送信</button>
+    </div>
+
+    <div id="status"></div>
+</div>
+
+<script>
+  // ▼▼▼ ステップ1で取得したCloudflare R2の情報を入力してください ▼▼▼
+    const R2_ACCOUNT_ID = 'a73ad889c944b152ede6d3329c545f8c';
+    const R2_ACCESS_KEY = '92d4bcff0e4c138bdbcb0d4def85d114';
+    const R2_SECRET_KEY = 'c0710a593132682ac557ab21b0c973974c0956ab49cb8d28a57aa67b7bc7c395';
+    const BUCKET_NAME = 'mercari-images'; // 作成したバケット名
+    const PUBLIC_URL = 'https://pub-8e4386156d26427f861486afe0381fb4.r2.dev'; // 許可したR2.devサブ
+
+    // AWS SDKの設定（R2に向ける）
+    AWS.config.update({
+        accessKeyId: R2_ACCESS_KEY,
+        secretAccessKey: R2_SECRET_KEY,
+        region: 'auto',
+        endpoint: new AWS.Endpoint(`https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`)
+    });
+    const s3 = new AWS.S3({ signatureVersion: 'v4' });
+
+    let cropper = null;
+    const fileInput = document.getElementById('file-input');
+    const image = document.getElementById('image');
+    const uploadBtn = document.getElementById('upload-btn');
+    const status = document.getElementById('status');
+
+    // 画像が選択（撮影）されたらCropperを起動
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            image.src = event.target.result;
+            document.getElementById('image-container').style.display = 'block';
+            uploadBtn.style.display = 'block';
+
+            if (cropper) cropper.destroy();
+            
+            // 1:1固定の切り抜き枠を設定
+            cropper = new Cropper(image, {
+                aspectRatio: 1,
+                viewMode: 1,
+                autoCropArea: 1,
+                dragMode: 'move'
+            });
+        };
+        reader.readAsDataURL(file);
+    });
+
+    // R2へのアップロード処理
+    function uploadImage() {
+        const code = document.getElementById('management-code').value.trim();
+        if (!code) { alert("管理番号を入力してください"); return; }
+
+        status.innerText = "画像を圧縮・送信中...";
+        uploadBtn.disabled = true;
+
+        // 1:1で切り抜いた画像を800x800pxのJPEGとして取得
+        const canvas = cropper.getCroppedCanvas({ width: 800, height: 800 });
+        
+        canvas.toBlob((blob) => {
+            const fileName = `${code}-${Date.now()}.jpg`;
+
+            const params = {
+                Bucket: BUCKET_NAME,
+                Key: fileName,
+                Body: blob,
+                ContentType: 'image/jpeg'
+            };
+
+            // R2へ送信
+            s3.putObject(params, function(err, data) {
+                if (err) {
+                    status.innerText = "エラー: " + err.message;
+                    uploadBtn.disabled = false;
+                } else {
+                    const finalUrl = `${PUBLIC_URL}/${fileName}`;
+                    status.innerHTML = `送信成功！<br><br>画像URL:<br><a href="${finalUrl}" target="_blank">${finalUrl}</a>`;
+                    uploadBtn.disabled = false;
+                }
+            });
+        }, 'image/jpeg', 0.6); // 品質60%で極限まで圧縮
+    }
+</script>
+
+</body>
+</html>
