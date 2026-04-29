@@ -3,40 +3,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>R2 1:1 Upload Test</title>
+    <title>1:1 高速連続撮影 & R2送信</title>
     <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1438.0.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
     <style>
-        body { font-family: -apple-system, sans-serif; margin: 0; padding: 20px; background: #EFEFEF; text-align: center; }
-        .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 16px; box-sizing: border-box; }
-        #image-container { width: 100%; margin-top: 20px; display: none; }
-        img { max-width: 100%; }
-        button { 
-            width: 100%; padding: 15px; margin-top: 10px; border: none; border-radius: 8px;
-            font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s;
+        body { font-family: -apple-system, sans-serif; margin: 0; padding: 10px; background: #EFEFEF; text-align: center; }
+        .container { max-width: 500px; margin: 0 auto; background: white; padding: 15px; border-radius: 16px; }
+        
+        /* 1:1の正方形カメラビュー */
+        .camera-wrapper {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+            margin-bottom: 15px;
         }
-        button:active { opacity: 0.7; transform: scale(0.98); }
-        .btn-camera { background: #00E5FF; color: #111; }
-        .btn-upload { background: #111; color: #fff; display: none; }
-        #status { margin-top: 20px; font-size: 14px; color: #666; font-weight: bold; word-break: break-all; }
+        #camera-stream {
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* はみ出した部分を隠して1:1にする */
+        }
+        
+        /* シャッターボタン */
+        .shutter-btn {
+            width: 80px; height: 80px; border-radius: 50%;
+            background: #FF90E8; border: 4px solid #fff; outline: 4px solid #111;
+            cursor: pointer; margin: 10px auto; transition: 0.1s;
+        }
+        .shutter-btn:active { transform: scale(0.9); background: #d53f8c; }
+        
+        /* 撮影した画像のプレビューエリア */
+        .preview-list {
+            display: flex; gap: 8px; overflow-x: auto; padding: 10px 0;
+        }
+        .preview-item {
+            position: relative; flex-shrink: 0;
+        }
+        .preview-img {
+            width: 70px; height: 70px; object-fit: cover; border-radius: 8px; border: 1px solid #ddd;
+        }
+        .delete-btn {
+            position: absolute; top: -5px; right: -5px; background: red; color: white;
+            border-radius: 50%; width: 20px; height: 20px; font-size: 12px; border: none; cursor: pointer;
+        }
+
+        .submit-btn {
+            width: 100%; padding: 15px; margin-top: 10px; border: none; border-radius: 8px;
+            font-size: 16px; font-weight: bold; background: #111; color: #fff; cursor: pointer;
+        }
+        .submit-btn:disabled { background: #ccc; }
+        #status { margin-top: 15px; font-size: 14px; color: #d32f2f; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h3>アプリ内 1:1撮影＆R2保存テスト</h3>
-    
     <input type="text" id="management-code" placeholder="管理番号 (例: OM10001HG)" style="width:100%; padding:12px; border-radius:8px; border:1px solid #ccc; box-sizing:border-box; margin-bottom:15px; font-size:16px;">
     
-    <button class="btn-camera" onclick="document.getElementById('file-input').click()">📷 カメラを起動 / 写真を選ぶ</button>
-    <input type="file" id="file-input" accept="image/*" capture="environment" style="display:none">
-
-    <div id="image-container">
-        <img id="image">
-        <button id="upload-btn" class="btn-upload" onclick="uploadImage()">✂️ 1:1で切り抜いて R2 へ送信</button>
+    <div class="camera-wrapper">
+        <video id="camera-stream" autoplay playsinline></video>
     </div>
 
+    <div class="shutter-btn" onclick="takePhoto()"></div>
+    <div style="font-size: 12px; color: #666; margin-bottom: 15px;">シャッターを押して連続撮影 (最大20枚)</div>
+
+    <div class="preview-list" id="preview-list"></div>
+    <canvas id="capture-canvas" style="display:none;" width="800" height="800"></canvas>
+
+    <button id="upload-btn" class="submit-btn" onclick="uploadAllImages()">R2へ一括送信</button>
     <div id="status"></div>
 </div>
 
@@ -46,9 +81,8 @@
     const R2_ACCESS_KEY = '92d4bcff0e4c138bdbcb0d4def85d114';
     const R2_SECRET_KEY = 'c0710a593132682ac557ab21b0c973974c0956ab49cb8d28a57aa67b7bc7c395';
     const BUCKET_NAME = 'mercari-images'; // 作成したバケット名
-    const PUBLIC_URL = 'https://pub-8e4386156d26427f861486afe0381fb4.r2.dev'; // 許可したR2.devサブ
+    const PUBLIC_URL = 'https://pub-8e4386156d26427f861486afe0381fb4.r2.dev'; // 許可したR2.devサブ 
 
-    // AWS SDKの設定（R2に向ける）
     AWS.config.update({
         accessKeyId: R2_ACCESS_KEY,
         secretAccessKey: R2_SECRET_KEY,
@@ -57,69 +91,102 @@
     });
     const s3 = new AWS.S3({ signatureVersion: 'v4' });
 
-    let cropper = null;
-    const fileInput = document.getElementById('file-input');
-    const image = document.getElementById('image');
-    const uploadBtn = document.getElementById('upload-btn');
-    const status = document.getElementById('status');
+    // カメラの起動処理
+    const video = document.getElementById('camera-stream');
+    let capturedBlobs = []; // 撮影した画像を溜める配列
 
-    // 画像が選択（撮影）されたらCropperを起動
-    fileInput.addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            image.src = event.target.result;
-            document.getElementById('image-container').style.display = 'block';
-            uploadBtn.style.display = 'block';
-
-            if (cropper) cropper.destroy();
-            
-            // 1:1固定の切り抜き枠を設定
-            cropper = new Cropper(image, {
-                aspectRatio: 1,
-                viewMode: 1,
-                autoCropArea: 1,
-                dragMode: 'move'
+    async function startCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'environment' } // 背面カメラを指定
             });
-        };
-        reader.readAsDataURL(file);
-    });
+            video.srcObject = stream;
+        } catch (err) {
+            document.getElementById('status').innerText = "カメラの起動に失敗しました。ブラウザのカメラ許可を確認してください。";
+        }
+    }
+    startCamera(); // ページを開いたら即カメラ起動
 
-    // R2へのアップロード処理
-    function uploadImage() {
+    // 撮影ボタンを押した時の処理
+    function takePhoto() {
+        if (capturedBlobs.length >= 20) {
+            alert("最大20枚までです"); return;
+        }
+
+        const canvas = document.getElementById('capture-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // ビデオの映像の「中央の正方形」を計算して切り抜く
+        const size = Math.min(video.videoWidth, video.videoHeight);
+        const startX = (video.videoWidth - size) / 2;
+        const startY = (video.videoHeight - size) / 2;
+
+        // キャンバス(800x800)に1:1で描画
+        ctx.drawImage(video, startX, startY, size, size, 0, 0, 800, 800);
+
+        // JPEGに圧縮して保存
+        canvas.toBlob((blob) => {
+            capturedBlobs.push(blob);
+            renderPreviews();
+        }, 'image/jpeg', 0.6);
+    }
+
+    // プレビューの表示
+    function renderPreviews() {
+        const list = document.getElementById('preview-list');
+        list.innerHTML = '';
+        capturedBlobs.forEach((blob, index) => {
+            const url = URL.createObjectURL(blob);
+            list.innerHTML += `
+                <div class="preview-item">
+                    <img src="${url}" class="preview-img">
+                    <button class="delete-btn" onclick="deletePhoto(${index})">×</button>
+                </div>
+            `;
+        });
+    }
+
+    // 写真の削除
+    function deletePhoto(index) {
+        capturedBlobs.splice(index, 1);
+        renderPreviews();
+    }
+
+    // 全画像のアップロード処理
+    async function uploadAllImages() {
         const code = document.getElementById('management-code').value.trim();
         if (!code) { alert("管理番号を入力してください"); return; }
+        if (capturedBlobs.length === 0) { alert("写真を撮影してください"); return; }
 
-        status.innerText = "画像を圧縮・送信中...";
+        const uploadBtn = document.getElementById('upload-btn');
+        const status = document.getElementById('status');
         uploadBtn.disabled = true;
+        status.innerText = "送信中... (0 / " + capturedBlobs.length + ")";
 
-        // 1:1で切り抜いた画像を800x800pxのJPEGとして取得
-        const canvas = cropper.getCroppedCanvas({ width: 800, height: 800 });
-        
-        canvas.toBlob((blob) => {
-            const fileName = `${code}-${Date.now()}.jpg`;
+        let successCount = 0;
 
+        for (let i = 0; i < capturedBlobs.length; i++) {
+            const fileName = `${code}-${i + 1}.jpg`;
             const params = {
                 Bucket: BUCKET_NAME,
                 Key: fileName,
-                Body: blob,
+                Body: capturedBlobs[i],
                 ContentType: 'image/jpeg'
             };
 
-            // R2へ送信
-            s3.putObject(params, function(err, data) {
-                if (err) {
-                    status.innerText = "エラー: " + err.message;
-                    uploadBtn.disabled = false;
-                } else {
-                    const finalUrl = `${PUBLIC_URL}/${fileName}`;
-                    status.innerHTML = `送信成功！<br><br>画像URL:<br><a href="${finalUrl}" target="_blank">${finalUrl}</a>`;
-                    uploadBtn.disabled = false;
-                }
-            });
-        }, 'image/jpeg', 0.6); // 品質60%で極限まで圧縮
+            try {
+                await s3.putObject(params).promise();
+                successCount++;
+                status.innerText = `送信中... (${successCount} / ${capturedBlobs.length})`;
+            } catch (err) {
+                alert(fileName + "の送信に失敗しました: " + err.message);
+            }
+        }
+
+        status.innerText = "全画像の送信が完了しました！";
+        uploadBtn.disabled = false;
+        capturedBlobs = []; // 送信完了後にリセット
+        renderPreviews();
     }
 </script>
 
