@@ -39,11 +39,15 @@ class ItemCreate(BaseModel):
     images: List[str]
     thumb_base64: str = ""
 
-# ★追加：採寸・更新用の型
 class ItemUpdate(BaseModel):
     old_code: str
     new_code: str
     measurements: str
+
+# ★追加：梱包（棚番号登録）用の型
+class ItemPack(BaseModel):
+    item_code: str
+    shelf_number: str
 
 # --- タイトル生成アルゴリズム ---
 def normalize_str(s: str) -> str:
@@ -240,12 +244,18 @@ def get_items():
     response = supabase.table("mercari_items").select("*").order("created_at").limit(1000).execute()
     return {"status": "OK", "data": response.data}
 
-# ★追加：採寸待ち（TMPから始まる）のアイテムだけを取得するAPI
 @app.get("/api/pending-measurements")
 def get_pending_measurements():
     if not supabase: return {"status": "error", "message": "DB未接続"}
-    # item_codeが「TMP-」で始まるものだけを抽出
     response = supabase.table("mercari_items").select("item_code, brand, title").like("item_code", "TMP-%").execute()
+    return {"status": "OK", "data": response.data}
+
+# ★追加：梱包待ち（採寸完了して正式番号になったが、shelf_numberが空）のアイテムを取得
+@app.get("/api/pending-packing")
+def get_pending_packing():
+    if not supabase: return {"status": "error", "message": "DB未接続"}
+    # TMP-で始まらない（採寸済み）、かつ shelf_number が null のものを取得
+    response = supabase.table("mercari_items").select("item_code, brand, title").not_.like("item_code", "TMP-%").is_("shelf_number", "null").execute()
     return {"status": "OK", "data": response.data}
 
 @app.post("/api/save-item")
@@ -281,27 +291,18 @@ def save_item(item: ItemCreate, target_code: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"保存エラー: {str(e)}")
 
-# ★追加：採寸データと正式コードを上書き保存するAPI
 @app.post("/api/update-measurement")
 def update_measurement(data: ItemUpdate):
     if not supabase: raise HTTPException(status_code=500, detail="DB未接続")
     try:
-        # 1. 既存のデータを取得する
         existing = supabase.table("mercari_items").select("*").eq("item_code", data.old_code).execute()
         if not existing.data:
             raise HTTPException(status_code=404, detail="対象の商品が見つかりません")
         target = existing.data[0]
         
-        # 2. 説明文の中の「未入力」のプレースホルダーを、実際の寸法データに置換する
-        new_desc = target["description"].replace(
-            "【寸法データ未入力（後ほど計測します）】", 
-            f"【実寸】\n{data.measurements}"
-        )
-        
-        # 3. タイトルに入っているTMP-xxxを、新しい正式コードに置換する
+        new_desc = target["description"].replace("【寸法データ未入力（後ほど計測します）】", f"【実寸】\n{data.measurements}")
         new_title = target["title"].replace(data.old_code, data.new_code)
         
-        # 4. Supabaseを上書きアップデートする
         update_data = {
             "item_code": data.new_code,
             "title": new_title,
@@ -310,5 +311,15 @@ def update_measurement(data: ItemUpdate):
         supabase.table("mercari_items").update(update_data).eq("item_code", data.old_code).execute()
         
         return {"status": "OK", "message": "採寸データの更新が完了しました！"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新エラー: {str(e)}")
+
+# ★追加：棚番号を保存するAPI
+@app.post("/api/update-shelf")
+def update_shelf(data: ItemPack):
+    if not supabase: raise HTTPException(status_code=500, detail="DB未接続")
+    try:
+        supabase.table("mercari_items").update({"shelf_number": data.shelf_number}).eq("item_code", data.item_code).execute()
+        return {"status": "OK", "message": "棚番号の登録が完了しました！"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"更新エラー: {str(e)}")
