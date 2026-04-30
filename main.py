@@ -39,7 +39,13 @@ class ItemCreate(BaseModel):
     images: List[str]
     thumb_base64: str = ""
 
-# --- タイトル生成アルゴリズム（GASからの完全移植） ---
+# ★追加：採寸・更新用の型
+class ItemUpdate(BaseModel):
+    old_code: str
+    new_code: str
+    measurements: str
+
+# --- タイトル生成アルゴリズム ---
 def normalize_str(s: str) -> str:
     s = s.upper()
     return re.sub(r'[\s　・、。,\-\(\)（）]', '', s)
@@ -228,12 +234,18 @@ def reserve_code(batch_name: str = "OM10000HG"):
     temp_code = f"TMP-{int(datetime.datetime.now().timestamp())}"
     return {"code": temp_code, "status": "OK", "displayCount": "新規"}
 
-# ダッシュボード用に全データを取得するAPIを追加！
 @app.get("/api/items")
 def get_items():
     if not supabase: return {"status": "error", "message": "DB未接続"}
-    # 日付の古い順に1000件取得
     response = supabase.table("mercari_items").select("*").order("created_at").limit(1000).execute()
+    return {"status": "OK", "data": response.data}
+
+# ★追加：採寸待ち（TMPから始まる）のアイテムだけを取得するAPI
+@app.get("/api/pending-measurements")
+def get_pending_measurements():
+    if not supabase: return {"status": "error", "message": "DB未接続"}
+    # item_codeが「TMP-」で始まるものだけを抽出
+    response = supabase.table("mercari_items").select("item_code, brand, title").like("item_code", "TMP-%").execute()
     return {"status": "OK", "data": response.data}
 
 @app.post("/api/save-item")
@@ -241,13 +253,11 @@ def save_item(item: ItemCreate, target_code: str):
     if not supabase: raise HTTPException(status_code=500, detail="DB未接続")
         
     ai_data = {"intro": ""}
-    # ★ リアルタイムAI生成！
     if item.thumb_base64 and item.thumb_base64 != "DUMMY":
         ai_data = analyze_image_with_gemini(item.thumb_base64, item.keywords)
         
     description = f"数ある商品の中からこちらのページをご覧頂きまして誠にありがとうございます(^w^)b\n\n{ai_data.get('intro', '')}\n\n状態：{item.status_text}\n\n 　 ※あくまでも中古品、新品であっても保管品でございますので、微細なダメージの見落としが発生する可能性が高いです。予めご了承頂きたく願います。\n\nサイズ表記：{item.size_input}\n【寸法データ未入力（後ほど計測します）】\n\n平置きの実寸採寸でございます。多少の誤差はお許し頂けましたら幸いです。\n\n送料：全アイテム送料込み、送料無料です！\n\n※佐川急便、ゆうパケット又はヤマト運輸宅急便、ネコポスの予定でございます。選択は不可でございます。\n\n\nスニーカー、ブーツ、ビンテージジーンズ、メンズウエア、アメカジウエア、ライダースジャケット、バイク用品、スポーツウエア、アイウエアetc……..\n超超超高価買取させて頂きます！！ご相談だけでもどうぞ気軽にお問い合わせくださいませ！！量が多い場合は出張買取も承ります！！業者様、古着店様からの買取依頼も大大大歓迎です！！"
     
-    # ★ 移植した完全版タイトル生成アルゴリズム！
     title = build_final_title(item, ai_data, target_code)
     
     try:
@@ -267,12 +277,38 @@ def save_item(item: ItemCreate, target_code: str):
             "images": item.images
         }
         supabase.table("mercari_items").insert(insert_data).execute()
-        
-        # 保存完了と同時に生成されたタイトルを返す
-        return {
-            "status": "OK", 
-            "code": target_code,
-            "generated_title": title
-        }
+        return {"status": "OK", "code": target_code, "generated_title": title}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"保存エラー: {str(e)}")
+
+# ★追加：採寸データと正式コードを上書き保存するAPI
+@app.post("/api/update-measurement")
+def update_measurement(data: ItemUpdate):
+    if not supabase: raise HTTPException(status_code=500, detail="DB未接続")
+    try:
+        # 1. 既存のデータを取得する
+        existing = supabase.table("mercari_items").select("*").eq("item_code", data.old_code).execute()
+        if not existing.data:
+            raise HTTPException(status_code=404, detail="対象の商品が見つかりません")
+        target = existing.data[0]
+        
+        # 2. 説明文の中の「未入力」のプレースホルダーを、実際の寸法データに置換する
+        new_desc = target["description"].replace(
+            "【寸法データ未入力（後ほど計測します）】", 
+            f"【実寸】\n{data.measurements}"
+        )
+        
+        # 3. タイトルに入っているTMP-xxxを、新しい正式コードに置換する
+        new_title = target["title"].replace(data.old_code, data.new_code)
+        
+        # 4. Supabaseを上書きアップデートする
+        update_data = {
+            "item_code": data.new_code,
+            "title": new_title,
+            "description": new_desc
+        }
+        supabase.table("mercari_items").update(update_data).eq("item_code", data.old_code).execute()
+        
+        return {"status": "OK", "message": "採寸データの更新が完了しました！"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新エラー: {str(e)}")
