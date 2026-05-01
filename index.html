@@ -1,87 +1,476 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>1:1 高速連続撮影 & R2送信</title>
-    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1438.0.min.js"></script>
-    <style>
-        body { font-family: -apple-system, sans-serif; margin: 0; padding: 10px; background: #EFEFEF; text-align: center; }
-        .container { max-width: 500px; margin: 0 auto; background: white; padding: 15px; border-radius: 16px; }
-        
-        /* 1:1の正方形カメラビュー */
-        .camera-wrapper {
-            width: 100%;
-            aspect-ratio: 1 / 1;
-            background: #000;
-            border-radius: 12px;
-            overflow: hidden;
-            position: relative;
-            margin-bottom: 15px;
-        }
-        #camera-stream {
-            width: 100%;
-            height: 100%;
-            object-fit: cover; /* はみ出した部分を隠して1:1にする */
-        }
-        
-        /* シャッターボタン */
-        .shutter-btn {
-            width: 80px; height: 80px; border-radius: 50%;
-            background: #FF90E8; border: 4px solid #fff; outline: 4px solid #111;
-            cursor: pointer; margin: 10px auto; transition: 0.1s;
-        }
-        .shutter-btn:active { transform: scale(0.9); background: #d53f8c; }
-        
-        /* 撮影した画像のプレビューエリア */
-        .preview-list {
-            display: flex; gap: 8px; overflow-x: auto; padding: 10px 0;
-        }
-        .preview-item {
-            position: relative; flex-shrink: 0;
-        }
-        .preview-img {
-            width: 70px; height: 70px; object-fit: cover; border-radius: 8px; border: 1px solid #ddd;
-        }
-        .delete-btn {
-            position: absolute; top: -5px; right: -5px; background: red; color: white;
-            border-radius: 50%; width: 20px; height: 20px; font-size: 12px; border: none; cursor: pointer;
-        }
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="出品システム">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&display=swap" rel="stylesheet">
+  
+  <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1438.0.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  
+  <style>
+    * { touch-action: manipulation; }
+    body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;padding:15px 10px;background:#EFEFEF;color:#111;}
+    .container{max-width:500px;margin:0 auto;background:#EFEFEF;padding:10px;border-radius:16px;position:relative;}
+    
+    .app-main-title { font-family: 'Dela Gothic One', sans-serif; font-size: 25px; text-align: center; margin-top: 80px; margin-bottom: 40px; color: #111; }
+    .main-buttons-container { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 0; padding: 0 10px; }
+    .home-icon-main { width: 40px; height: 40px; object-fit: contain; flex-shrink: 0; }
+    
+    .home-action-btn { width: 100%; flex-grow: 0; height: 64px; border-radius: 12px; border: 2px solid #111; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-direction: row; gap: 8px; transition: 0.1s; font-family: 'Dela Gothic One', sans-serif; font-size: 19px; font-weight: normal; color: #111; padding: 0 10px; text-align: center; letter-spacing: 0.5px; box-sizing: border-box; }
+    .home-action-btn * { pointer-events: none; }
+    .home-action-btn:active { opacity: 0.7; transform: scale(0.98); }
+    
+    .btn-camera { background-color: #FF90E8; }
+    .btn-measure { background-color: #00E5FF; }
+    .btn-pack { background-color: #FFDE59; }
+    .btn-admin { background-color: #B28DFF; line-height: 1.3; }
+    .btn-incentive { background-color: #fff; }
 
-        .submit-btn {
-            width: 100%; padding: 15px; margin-top: 10px; border: none; border-radius: 8px;
-            font-size: 16px; font-weight: bold; background: #111; color: #fff; cursor: pointer;
-        }
-        .submit-btn:disabled { background: #ccc; }
-        #status { margin-top: 15px; font-size: 14px; color: #d32f2f; font-weight: bold; }
-    </style>
+    .main-buttons-container .home-action-btn { height: 128px; font-size: 25px; }
+    .main-buttons-container .btn-admin { font-size: 25px; }
+    .main-buttons-container .home-icon-main { width: 60px; height: 60px; }
+
+    .incentive-container { padding: 0 10px; margin-top: 40px; margin-bottom: 20px; }
+
+    .sub-container{background:#fff;padding:20px;border-radius:16px;border:1px solid #eaeaea;display:none; position:relative;}
+    .nav-bar{display:flex;justify-content:space-between;align-items:center;padding-bottom:15px;border-bottom:1px solid #eaeaea;margin-bottom:15px;}
+    .sticky-nav {position:sticky; top:0; z-index:100; background:#fff; padding-top:20px; margin-top:-20px;}
+    
+    .mode-title{font-family:'Dela Gothic One',sans-serif; font-weight:normal;font-size:18px;display:flex;align-items:center;gap:8px;}
+    #screen-new .mode-title{color:#D53F8C;} #screen-new .nav-bar{border-color:#FF90E8;} #screen-new .back-btn{background:#FF90E8;border-color:#111;}
+    #screen-measure .mode-title{color:#008B99;} #screen-measure .nav-bar-border{border-bottom:1px solid #00E5FF; margin-bottom: 15px;} #screen-measure .back-btn{background:#00E5FF;border-color:#111;}
+    #screen-pack .mode-title{color:#B38F00;} #screen-pack .nav-bar{border-color:#FFDE59;} #screen-pack .back-btn{background:#FFDE59;border-color:#111;}
+    #screen-admin .mode-title{color:#6A35FF;} #screen-admin .nav-bar{border-color:#B28DFF;} #screen-admin .back-btn{background:#B28DFF;border-color:#111;}
+    .back-btn{padding:8px 16px;border-radius:8px;font-weight:normal;font-size:13px;cursor:pointer;transition:0.1s;border:1px solid transparent;color:#111;}
+    .back-btn:active{opacity: 0.7;}
+    
+    .question-block{margin-top:10px;position:relative;}
+    label.title{font-weight:normal;font-size:14px;display:block;margin-bottom:4px;}
+    .required{color:#d32f2f;font-size:12px;margin-left:3px;}
+    
+    input[type="text"],input[type="number"],input[type="date"],select,input[type="file"],textarea{width:100%;padding:8px 10px;background:#f9f9f9;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;font-size:16px;margin-bottom:4px;transition:0.1s;-webkit-appearance:none;}
+    input:focus,select:focus,textarea:focus{background:#fff;border-color:#111;outline:none;}
+    .is-filled{background:#fafafa!important;border-color:#999!important;}
+    
+    .radio-group{display:flex;flex-wrap:nowrap;gap:2px;}
+    .radio-group label{border:1px solid #ddd;padding:4px 1px;flex:1;text-align:center;border-radius:4px;font-size:10px;font-weight:normal;cursor:pointer;background:#f9f9f9;color:#555;display:flex;align-items:center;justify-content:center;min-height:28px;line-height:1.1;}
+    .radio-group input[type="radio"]{display:none;}
+    .radio-group input[type="radio"]:checked + span{font-weight:normal;color:#fff;}
+    .radio-group label:has(input:checked){background:#111;border-color:#111;color:#fff;}
+    
+    button.submit-btn{font-family:'Dela Gothic One',sans-serif; width:100%;padding:10px;margin-top:15px;background:#111;color:#fff;border:1px solid #111;border-radius:8px;font-size:16px;font-weight:normal;cursor:pointer;transition:0.1s;}
+    button.submit-btn:active{opacity: 0.7;}
+    button.submit-btn:disabled{background:#ddd;border-color:#ddd;color:#888;transform:none;}
+    
+    .camera-wrapper { width: 100%; aspect-ratio: 1 / 1; background: #000; border-radius: 12px; overflow: hidden; position: relative; margin-bottom: 10px; border: 1px solid #ccc; }
+    #camera-stream { width: 100%; height: 100%; object-fit: cover; }
+    .shutter-btn { width: 64px; height: 64px; border-radius: 50%; background: #FF90E8; border: 4px solid #fff; outline: 3px solid #111; cursor: pointer; margin: 0 auto 5px auto; transition: 0.1s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .shutter-btn:active { transform: scale(0.9); background: #d53f8c; }
+    .preview-list { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; min-height: 70px; }
+    .preview-item { position: relative; flex-shrink: 0; }
+    .preview-img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid #111; }
+    .delete-btn-cam { position: absolute; top: -6px; right: -6px; background: #d32f2f; color: #fff; border-radius: 50%; width: 22px; height: 22px; font-size: 14px; font-weight:bold; border: 1px solid #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+    .overlay-modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:2000;justify-content:center;align-items:center;padding:20px;backdrop-filter:blur(4px);}
+    .modal-content{background:#fff;padding:24px;border-radius:16px;border:1px solid #111;text-align:center;width:100%;max-width:360px;max-height:90vh;overflow-y:auto;}
+    #editCodeModal .modal-content, #packConfirmModal .modal-content { padding: 12px; max-width: 320px; }
+    
+    .modal-code-text{font-size:32px;font-weight:normal;margin:15px 0;letter-spacing:2px;background:#fff;padding:15px;border-radius:12px;border:1px dashed #111;}
+    
+    .modal-btn{font-family:'Dela Gothic One',sans-serif; background:#111;color:#fff;border:1px solid #111;padding:14px 30px;border-radius:10px;font-weight:normal;cursor:pointer;width:100%;margin-top:10px;transition:0.1s;}
+    .modal-btn:active,.modal-btn-sub:active{opacity: 0.7;}
+    .modal-btn-cancel{background:#f0f0f0;color:#333;border:1px solid #ddd;padding:14px 30px;border-radius:10px;font-weight:normal;cursor:pointer;width:100%;margin-top:10px;}
+    .modal-btn-sub{font-family:'Dela Gothic One',sans-serif; background:#fff;color:#111;border:1px solid #111;padding:12px;border-radius:10px;font-size:13px;font-weight:normal;cursor:pointer;width:100%;margin-top:10px;transition:0.1s;}
+    .modal-btn-danger{background:#fff;color:#d32f2f;border:1px solid #d32f2f;padding:12px;border-radius:10px;font-size:13px;font-weight:normal;cursor:pointer;width:100%;margin-top:10px;}
+    
+    .admin-sheet-tabs{display:flex;overflow-x:auto;gap:8px;padding-bottom:12px;margin-bottom:15px;border-bottom:1px solid #eaeaea;white-space:nowrap;}
+    .admin-tab{padding:6px 14px;border-radius:16px;font-size:12px;font-weight:normal;cursor:pointer;border:1px solid transparent;}
+    .admin-tab-active{background:#111;color:#fff;border-color:#111;}
+    .admin-tab-inactive{background:#fff;color:#666;border-color:#ddd;}
+    .admin-header{background:#fff;padding:6px 10px;border-radius:10px;margin-bottom:15px;text-align:center;border:1px solid #111;}
+    .batch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(95px,1fr));gap:6px;margin-top:10px;}
+    
+    .batch-item{position:relative; padding:0;border-radius:6px;border:1px solid #ddd;display:flex;align-items:center;justify-content:flex-start;transition:0.1s;height:32px;box-sizing:border-box;overflow:hidden;cursor:pointer;}
+    .item-empty{background:#fafafa;color:#aaa;border-style:dashed;cursor:default;padding-left:10px;}
+    .item-active{background:#FF90E8;color:#111;}
+    .item-measured{background:#00E5FF;color:#111;}
+    .item-packed{background:#FFDE59;color:#111;}
+    .item-active:active,.item-measured:active,.item-packed:active{opacity: 0.7;}
+    .admin-item-check { accent-color: #D53F8C; }
+
+    .item-list{display:flex;flex-direction:column;gap:12px;}
+    .item-card{display:flex;align-items:center;background:#fff;border:1px solid #111;border-radius:12px;padding:12px;cursor:pointer;}
+    .item-thumb{width:80px;height:80px;object-fit:cover !important;border-radius:8px;margin-right:15px;background:#f0f0f0;border:none; flex-shrink:0; padding:0 !important;}
+    .item-info{flex-grow:1;}
+    .item-brand-main{font-weight:normal;font-size:14px;margin-bottom:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+    .item-code-sub{font-size:12px;font-weight:normal;color:#666;}
+    
+    .numpad-overlay{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%, -50%);width:90%;max-width:320px;background:#fff;z-index:1000;padding:12px 10px;border-radius:20px;border:1px solid #111;}
+    .numpad-header{display:flex;flex-direction:column;align-items:stretch;margin-bottom:6px;gap:6px;}
+    .numpad-display-area{background:#fff;padding:4px 6px;border-radius:10px;border:1px solid #111;}
+    .numpad-input-field {width:100%; border:none; font-size:32px !important; font-weight:normal; outline:none; background:transparent; caret-color:#d32f2f; padding:0; color:#111;}
+    .numpad-btn-group{display:flex;gap:6px;width:100%;}
+    .numpad-cancel{background:#f0f0f0;border:1px solid #ddd;padding:8px;border-radius:8px;font-size:14px;font-weight:normal;cursor:pointer; flex:1;}
+    .numpad-close{background:#111;color:#fff;border:1px solid #111;padding:8px;border-radius:8px;font-size:14px;font-weight:normal;cursor:pointer; flex:1;}
+    .numpad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;}
+    
+    .numpad-grid button{font-family:'Dela Gothic One',sans-serif; background:#fff;border:1px solid #111;border-radius:6px;font-size:26px;font-weight:normal;padding:0; height:52px; display:flex; align-items:center; justify-content:center; cursor:pointer; touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-appearance: none;}
+    .numpad-grid button:active{opacity: 0.7;background:#f5f5f7;}
+    .numpad-space{font-size:14px!important;}
+    .numpad-del{color:#d32f2f!important;font-size:14px!important;}
+    
+    #loadingOverlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,0.9);z-index:3000;justify-content:center;align-items:center;flex-direction:column;font-weight:normal;text-align:center;}
+    .spinner{border:4px solid #eaeaea;border-top:4px solid #111;border-radius:50%;width:40px;height:40px;animation:spin 0.8s linear infinite;margin-bottom:12px;}
+    @keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
+    .autocomplete-items{position:absolute;border:1px solid #111;z-index:99;top:100%;left:0;right:0;max-height:200px;overflow-y:auto;background:#fff;border-radius:8px;margin-top:4px;}
+    .autocomplete-items div{padding:12px 14px;cursor:pointer;border-bottom:1px solid #f5f5f7;font-size:14px;font-weight:normal;}
+    #bg-status-badge{display:none;background:#111;color:#fff;padding:10px;border-radius:8px;font-size:12px;font-weight:normal;margin-bottom:15px;text-align:center;border:1px solid #111;}
+    .mini-spinner{display:inline-block;width:10px;height:10px;border:2px solid #555;border-top:2px solid #fff;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;margin-right:6px;}
+
+    .admin-image-gallery { display:flex; gap:8px; overflow-x:auto; padding:4px 0 10px 0; }
+    .admin-image-item { position:relative; flex-shrink:0; }
+    .admin-image-img { width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid #ddd; }
+    .admin-image-delete { position:absolute; top:-6px; right:-6px; background:#d32f2f; color:#fff; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:normal; cursor:pointer; }
+  </style>
 </head>
 <body>
+  <div id="loadingOverlay">
+      <div class="spinner"></div>
+      <div id="loadingText" style="font-weight:bold; font-size:14px;">処理中...</div>
+  </div>
 
-<div class="container">
-    <input type="text" id="management-code" placeholder="管理番号 (例: OM10001HG)" style="width:100%; padding:12px; border-radius:8px; border:1px solid #ccc; box-sizing:border-box; margin-bottom:15px; font-size:16px;">
-    
-    <div class="camera-wrapper">
-        <video id="camera-stream" autoplay playsinline></video>
+  <div id="imagePreviewModal" class="overlay-modal" style="z-index:3500; background:rgba(0,0,0,0.8);" onclick="this.style.display='none'">
+    <img id="fullImagePreview" src="" style="max-width:95%; max-height:95%; border-radius:12px; border:1px solid #fff; object-fit:contain;">
+  </div>
+
+  <div class="container" id="main-container">
+    <div id="screen-menu">
+      <div class="app-main-title">出品アプリ</div>
+      <div class="main-buttons-container">
+        <button class="home-action-btn btn-camera" onclick="checkAndGoNew()">
+          <img src="https://www.dropbox.com/scl/fi/cayjf76jmozo7b43nph1x/IMG_3551.png?rlkey=31208b8p4atfn6mfdrg20fl8d&st=4vj93j2c&raw=1" class="home-icon-main">出品
+        </button>
+        <button class="home-action-btn btn-measure" onclick="switchScreen('screen-measure'); loadPendingMeasurements();">
+          <img src="https://www.dropbox.com/scl/fi/et0to1e7f5ut9e3zaxuez/IMG_3550.png?rlkey=iwni9esf2xc42ztuzsrkp223m&st=c6otipsk&raw=1" class="home-icon-main">採寸
+        </button>
+        <button class="home-action-btn btn-pack" onclick="switchScreen('screen-pack'); loadPendingPackings();">
+          <img src="https://www.dropbox.com/scl/fi/6fqmch67auirs8sarisqo/IMG_3549.png?rlkey=0acdsawt02uttkp6ukx0b271t&st=8579cstc&raw=1" class="home-icon-main">梱包
+        </button>
+        <button class="home-action-btn btn-admin" onclick="switchScreen('screen-admin'); loadAdminList();">
+          <img src="https://www.dropbox.com/scl/fi/hbbkrd4e8pyk6omymf2gx/IMG_3552.png?rlkey=2zvuvwpowco4yfsdbj9pvfqf9&st=9jc5tzx4&raw=1" class="home-icon-main">管理
+        </button>
+      </div>
+      <div class="incentive-container">
+        <button class="home-action-btn btn-incentive" onclick="openIncentiveModal()">
+          <img src="https://www.dropbox.com/scl/fi/qhov92i5l348k8mwjs7ao/IMG_5489-removebg-preview.png?rlkey=z150r3j0khmdetpp6mxm14492&st=j0zvcniw&raw=1" class="home-icon-main">インセンティブ
+        </button>
+      </div>
     </div>
 
-    <div class="shutter-btn" onclick="takePhoto()"></div>
-    <div style="font-size: 12px; color: #666; margin-bottom: 15px;">シャッターを押して連続撮影 (最大20枚)</div>
+    <div id="screen-new" class="sub-container">
+      <div class="nav-bar"><button class="back-btn" onclick="switchScreen('screen-menu')">戻る</button><div class="mode-title">新規出品</div></div>
+      <div id="bg-status-badge"><span class="mini-spinner"></span><span id="bg-status-text">処理中です...</span></div>
+      <form id="form-new">
+        <div class="question-block">
+          <label class="title">ブランド名<span class="required">*</span> <span id="brandLoadStatus" style="font-weight:normal; font-size:11px; color:#666;">(読込中...)</span></label>
+          <input type="text" id="brand" placeholder="ブランド検索..." autocomplete="off" required>
+          <input type="hidden" id="brandId">
+          <div id="brand-autocomplete-list" class="autocomplete-items"></div>
+        </div>
+        <div class="question-block"><label class="title">素材</label>
+          <div class="radio-group">
+            <label><input type="radio" name="materialRadio" value="コットン100%"><span>綿<br>100%</span></label>
+            <label><input type="radio" name="materialRadio" value="レーヨン100%"><span>ﾚｰﾖﾝ<br>100%</span></label>
+            <label><input type="radio" name="materialRadio" value="ポリエステル100%"><span>ﾎﾟﾘ<br>100%</span></label>
+            <label><input type="radio" name="materialRadio" value="コットン ポリエステル"><span>綿ポリ</span></label>
+            <label><input type="radio" name="materialRadio" value="その他"><span>その他</span></label>
+          </div>
+          <input type="text" id="materialOther" placeholder="その他の素材..." style="margin-top:4px; display:none;">
+        </div>
+        <div class="question-block"><label class="title">フリーワード</label><input type="text" id="freeKeywords" placeholder="例: ヴィンテージ など"></div>
+        <div class="question-block"><label class="title">商品の状態<span class="required">*</span></label>
+          <select id="statusText" required>
+            <option value="目立った傷や汚れなし" selected>目立った傷や汚れなし</option>
+            <option value="新品、未使用">新品、未使用</option>
+            <option value="未使用に近い">未使用に近い</option>
+            <option value="やや傷や汚れあり">やや傷や汚れあり</option>
+            <option value="傷や汚れあり">傷や汚れあり</option>
+          </select>
+        </div>
+        <div class="question-block"><label class="title">カテゴリー<span class="required">*</span></label><div id="category-dropdowns"></div><input type="hidden" id="finalCategoryId"><input type="hidden" id="finalCategoryText"></div>
+        <div class="question-block"><label class="title">サイズ表記<span class="required">*</span></label>
+          <div class="radio-group">
+            <label><input type="radio" name="size" value="XS"><span>XS</span></label><label><input type="radio" name="size" value="S"><span>S</span></label><label><input type="radio" name="size" value="M"><span>M</span></label><label><input type="radio" name="size" value="L"><span>L</span></label><label><input type="radio" name="size" value="XL"><span>XL</span></label><label><input type="radio" name="size" value="XXL"><span>XXL</span></label><label><input type="radio" name="size" value="3L"><span>3L</span></label><label><input type="radio" name="size" value="4L"><span>4L</span></label><label><input type="radio" name="size" value="FREE SIZE"><span>FREE</span></label>
+          </div>
+          <input type="text" id="sizeOtherText" placeholder="その他..." style="margin-top:4px;">
+        </div>
+        
+        <div class="question-block" style="background:#f9f9f9; padding:10px; border-radius:12px; border:1px solid #ddd;">
+          <label class="title" style="margin-bottom:8px;">商品画像 (1:1撮影)<span class="required">*</span></label>
+          <div class="camera-wrapper">
+              <video id="camera-stream" autoplay playsinline></video>
+          </div>
+          <div class="shutter-btn" onclick="takePhoto()"></div>
+          <div style="font-size: 11px; color: #666; text-align: center; margin-bottom: 5px;">シャッターを押して連続撮影 (最大20枚)</div>
+          <div class="preview-list" id="preview-list"></div>
+          <canvas id="capture-canvas" style="display:none;" width="800" height="800"></canvas>
+        </div>
 
-    <div class="preview-list" id="preview-list"></div>
-    <canvas id="capture-canvas" style="display:none;" width="800" height="800"></canvas>
+        <button type="button" id="submitNewBtn" class="submit-btn" onclick="startSubmissionProcess()">送信する</button>
+      </form>
+    </div>
 
-    <button id="upload-btn" class="submit-btn" onclick="uploadAllImages()">R2へ一括送信</button>
-    <div id="status"></div>
-</div>
+    <div id="screen-measure" class="sub-container">
+      <div class="nav-bar sticky-nav" style="align-items: flex-start; border-bottom: none; margin-bottom: 0; padding-bottom: 5px;">
+        <button class="back-btn" onclick="switchScreen('screen-menu')" style="margin-top: 5px;">戻る</button>
+        <div style="display: flex; flex-direction: column; align-items: flex-end;">
+          <div class="mode-title">未採寸リスト <span id="measure-count-badge" style="font-size:12px; font-weight:normal; background:#f0f0f0; padding:2px 8px; border-radius:10px; color:#111; border:1px solid #ddd;">0件</span></div>
+        </div>
+      </div>
+      <div class="nav-bar-border"></div>
+      <div style="margin-bottom:15px;">
+        <select id="measureCategoryFilter" style="padding:10px 14px; width:100%; border:1px solid #111; border-radius:8px; font-weight:normal;" onchange="renderMeasureList()"></select>
+      </div>
+      <div id="measure-list" class="item-list"></div>
+    </div>
 
-<script>
-  // ▼▼▼ ステップ1で取得したCloudflare R2の情報を入力してください ▼▼▼
+    <div id="screen-pack" class="sub-container">
+      <div class="nav-bar sticky-nav">
+        <button class="back-btn" onclick="switchScreen('screen-menu')">戻る</button>
+        <div class="mode-title">梱包・撮影リスト <span id="pack-count-badge" style="font-size:12px; font-weight:normal; background:#f0f0f0; padding:2px 8px; border-radius:10px; color:#111; border:1px solid #ddd;">0件</span></div>
+      </div>
+      <div style="margin-bottom:15px;">
+        <select id="packCategoryFilter" style="padding:10px 14px; width:100%; border:1px solid #111; border-radius:8px; font-weight:normal;" onchange="renderPackList()"></select>
+      </div>
+      <div id="pack-list" class="item-list"></div>
+      <input type="file" id="packImageInput" accept="image/*" capture="environment" style="display:none;">
+      <input type="file" id="packImageInputFolder" accept="image/*" style="display:none;">
+    </div>
+
+    <div id="screen-admin" class="sub-container">
+      <div class="nav-bar sticky-nav">
+        <button class="back-btn" onclick="switchScreen('screen-menu')">戻る</button>
+        <div class="mode-title">ダッシュボード</div>
+      </div>
+      <div id="admin-sheet-tabs" class="admin-sheet-tabs"></div>
+      
+      <div style="text-align:center; margin-bottom:15px; display:flex; flex-direction:column; gap:10px; align-items:center;">
+        <button class="modal-btn-sub" style="background:#B28DFF; color:#fff; border-color:#111; padding:10px 16px; width:90%; max-width:300px; font-size:13px; font-weight:normal; margin-top:0;" onclick="executeBulkAI()">✨ 未生成AI文章を一括生成</button>
+        <button class="modal-btn-sub" style="background:#00E5FF; color:#111; border-color:#111; padding:10px 16px; width:90%; max-width:300px; font-size:13px; font-weight:normal; margin-top:0;" onclick="executeBatchDownload()">📥 画像とCSVを一括ダウンロード</button>
+      </div>
+      
+      <div id="admin-move-panel" style="background:#fff; border:1px solid #111; padding:10px; border-radius:10px; margin-bottom:15px; display:none; flex-direction:column; gap:8px;">
+        <div style="font-size:12px; font-weight:normal;">🚚 選択したアイテムを別バッチへ移動</div>
+        <select id="adminMoveTargetBatch" style="padding:6px; font-size:14px; width:100%; border:1px solid #111; border-radius:6px; background:#f9f9f9;"></select>
+        <button class="modal-btn" style="margin-top:4px; padding:8px; font-size:14px; background:#FF90E8; color:#111; border-color:#111;" onclick="executeMoveItems()">移動を実行</button>
+      </div>
+      <div class="admin-header">
+        <div id="currentBatchDisplay" style="font-size:14px; font-weight:normal;">読込中...</div>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:8px; font-size:10px; margin-bottom:5px; font-weight:normal; text-align:center;">
+        <span style="padding:4px 8px; border:1px solid #ddd; border-radius:6px; background:#fafafa; color:#aaa; display:flex; align-items:center;">未登録</span>
+        <span style="padding:4px 8px; border-radius:6px; background:#FF90E8; color:#111; display:flex; align-items:center;">出品済</span>
+        <span style="padding:4px 8px; border-radius:6px; background:#00E5FF; color:#111; display:flex; align-items:center;">採寸済</span>
+        <span style="padding:4px 8px; border-radius:6px; background:#FFDE59; color:#111; display:flex; align-items:center;">梱包済</span>
+      </div>
+      <div id="admin-list"></div>
+      <div style="text-align:center; margin-top:30px; padding-bottom:10px;">
+        <button onclick="openBatchSettingsModal()" style="background:#fff; border:1px solid #111; padding:10px 20px; border-radius:8px; font-size:13px; font-weight:normal; cursor:pointer;">次の納品分を設定</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="assignedCodeModal" class="overlay-modal">
+    <div class="modal-content">
+      <div style="font-size:16px; font-weight:normal;">新規登録完了</div>
+      <div style="font-size:13px; font-weight:normal; color:#666; margin-top:8px;">現在このバッチの</div>
+      <div class="modal-code-text" id="assignedCodeDisplay" style="color:#D53F8C;">--点目</div>
+      <div style="font-size:11px; font-weight:normal; color:#d32f2f; margin-bottom:10px;">※管理番号は「梱包」の時に付与されます</div>
+      <button class="modal-btn" onclick="closeAssignedCodeModal()">確認して次の服へ</button>
+    </div>
+  </div>
+
+  <div id="batchSettingsModal" class="overlay-modal">
+    <div class="modal-content">
+      <div style="font-size:16px; font-weight:normal; margin-bottom:15px;">新バッチ設定</div>
+      <div style="display:flex; gap:10px; margin-bottom:10px;">
+        <div style="flex:1; text-align:left;"><label style="font-size:11px; font-weight:normal;">接頭辞</label><input type="text" id="batchPrefix" value="OM"></div>
+        <div style="flex:1; text-align:left;"><label style="font-size:11px; font-weight:normal;">接尾辞</label><input type="text" id="batchSuffix" value="HG"></div>
+      </div>
+      <div style="display:flex; gap:10px; margin-bottom:15px;">
+        <div style="flex:1; text-align:left;"><label style="font-size:11px; font-weight:normal;">開始</label><input type="number" id="batchStart"></div>
+        <div style="flex:1; text-align:left;"><label style="font-size:11px; font-weight:normal;">終了</label><input type="number" id="batchEnd"></div>
+      </div>
+      <button class="modal-btn" onclick="submitBatchSettings()">開始</button><button class="modal-btn-cancel" onclick="closeBatchSettingsModal()">キャンセル</button>
+    </div>
+  </div>
+  
+  <div id="editCodeModal" class="overlay-modal">
+    <div class="modal-content">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <div style="font-size:14px; font-weight:normal;">アイテム操作</div>
+        <div style="font-size:10px; font-weight:normal;">選択: <strong id="editOldCodeDisplay" style="font-size:14px; font-weight:normal;"></strong></div>
+      </div>
+      
+      <div id="editErrorReason" style="display:none; color:#d32f2f; font-size:10px; font-weight:normal; margin-bottom:6px; background:#ffeeee; padding:4px; border-radius:6px; border:1px solid #ffcccc;"></div>
+
+      <div style="display:flex; gap:8px; margin-bottom:6px; text-align:left;">
+        <img id="editItemImage" src="" style="width:56px; height:56px; object-fit:cover; border-radius:8px; border:1px solid #111; display:none; flex-shrink:0; cursor:pointer;" onclick="showFullImage(event, this.src)">
+        <div style="flex-grow:1; display:flex; flex-direction:column; gap:4px;">
+          <div>
+            <label style="font-size:9px; font-weight:normal; display:block; margin-bottom:2px;">商品の状態</label>
+            <select id="editItemStatus" style="padding:4px; font-size:16px; margin-bottom:0; width:100%;">
+              <option value="目立った傷や汚れなし">目立った傷や汚れなし</option>
+              <option value="新品、未使用">新品、未使用</option>
+              <option value="未使用に近い">未使用に近い</option>
+              <option value="やや傷や汚れあり">やや傷や汚れあり</option>
+              <option value="傷や汚れあり">傷や汚れあり</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:9px; font-weight:normal; display:block; margin-bottom:2px;">寸法</label>
+            <input type="text" id="editTextDims" style="padding:4px; font-size:16px; margin-bottom:0;">
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:10px; border-bottom:1px solid #eaeaea; padding-bottom:10px; text-align:left;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <label style="font-size:9px; font-weight:normal;">商品画像管理</label>
+          <div style="display:flex; gap:4px;">
+            <button class="modal-btn-sub" style="margin-top:0; padding:4px 8px; font-size:10px; width:auto; border-radius:6px;" onclick="document.getElementById('addAdminImageInput').click()">＋ 追加</button>
+            <button class="modal-btn-danger" style="margin-top:0; padding:4px 8px; font-size:10px; width:auto; border-radius:6px;" onclick="document.getElementById('bulkReplaceImageInput').click()">🔄 全入替</button>
+          </div>
+          <input type="file" id="addAdminImageInput" accept="image/*" multiple style="display:none;" onchange="uploadExtraImagesAdmin(this)">
+          <input type="file" id="bulkReplaceImageInput" accept="image/*" multiple style="display:none;" onchange="executeBulkReplaceImages(this)">
+        </div>
+        <div id="adminImageGallery" class="admin-image-gallery">
+          <div style="font-size:10px; color:#666;">読込中...</div>
+        </div>
+      </div>
+
+      <div style="text-align:left; margin-bottom:6px;">
+        <label style="font-size:9px; font-weight:normal; display:block; margin-bottom:2px;">商品名</label>
+        <textarea id="editTextTitle" rows="3" style="padding:4px; font-size:16px; margin-bottom:4px;"></textarea>
+        <label style="font-size:9px; font-weight:normal; display:block; margin-bottom:2px;">商品説明</label>
+        <textarea id="editTextDesc" rows="5" style="padding:4px; font-size:16px; margin-bottom:0;"></textarea>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid #eaeaea;">
+        <button class="modal-btn" style="margin-top:0; padding:6px; font-size:10px;" onclick="saveTextEdits()">保存</button>
+        <button class="modal-btn-sub" style="margin-top:0; padding:6px; font-size:10px; background:#FF90E8; color:#111; border-color:#111;" onclick="executeRetryAI()">状態変更＆再生成</button>
+      </div>
+
+      <div style="display:flex; gap:4px; align-items:flex-end; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid #eaeaea;">
+        <div style="flex-grow:1; text-align:left;">
+          <label style="font-size:9px; font-weight:normal; display:block; margin-bottom:2px;">番号強制修正</label>
+          <input type="hidden" id="editOldCodeInput">
+          <input type="text" id="editNewCodeInput" style="padding:4px; font-size:16px; margin-bottom:0;">
+        </div>
+        <button class="modal-btn-sub" style="margin-top:0; padding:6px 10px; width:auto; flex-shrink:0; font-size:10px;" onclick="submitCodeEdit()">修正</button>
+      </div>
+
+      <div style="margin-bottom:0;">
+        <button class="modal-btn-danger" style="margin-top:0; padding:6px; font-size:10px; width:100%;" onclick="deleteItemExecute()">削除</button>
+      </div>
+      
+      <button id="revertPackBtn" class="modal-btn-cancel" style="padding:6px; margin-top:6px; font-size:10px; border-color:#d32f2f; color:#d32f2f; display:none;" onclick="revertPackExecute()">梱包写真を削除して未梱包に戻す</button>
+      <button class="modal-btn-cancel" style="padding:6px; margin-top:6px; font-size:10px;" onclick="closeEditModal()">閉じる</button>
+    </div>
+  </div>
+
+  <div id="packConfirmModal" class="overlay-modal">
+    <div class="modal-content">
+      <div style="font-size:16px; font-weight:normal; margin-bottom:6px;">梱包アイテムの確認</div>
+      <div style="background:#f9f9f9; padding:10px; border-radius:8px; border:1px solid #eaeaea; margin-bottom:10px;">
+        <div id="packConfirmBrand" style="font-size:13px; font-weight:normal; color:#333; margin-top:4px;"></div>
+      </div>
+      <div style="text-align:left; margin-bottom:4px;"><label style="font-size:10px; font-weight:normal;">商品画像</label></div>
+      <div id="packConfirmGallery" class="admin-image-gallery" style="margin-bottom:15px; border:1px solid #eaeaea; padding:10px; border-radius:8px; background:#fff; min-height:80px;"></div>
+      <button class="modal-btn" style="background:#FFDE59; color:#111; border-color:#111; font-size:14px; padding:12px;" onclick="executePackPhoto()">カメラで撮影して管理番号を確定</button>
+      <button class="modal-btn-cancel" style="padding:10px; font-size:12px;" onclick="closePackConfirmModal()">キャンセル</button>
+    </div>
+  </div>
+  
+  <div id="finalAssignedCodeModal" class="overlay-modal" style="z-index:4000;">
+    <div class="modal-content" style="border-color:#FFDE59;">
+      <div style="font-size:18px; font-weight:normal; color:#B38F00;">🎊 梱包完了 ＆ 番号確定！</div>
+      <div style="font-size:13px; font-weight:normal; color:#333; margin-top:10px;">以下の管理番号を付箋に書いて、<br>袋に貼ってください。</div>
+      <div class="modal-code-text" id="finalAssignedCodeText" style="font-size:36px; color:#111; background:#FFF9C4;"></div>
+      <button class="modal-btn" style="background:#FFDE59; color:#111; border-color:#111;" onclick="closeFinalAssignedCodeModal()">確認して次へ</button>
+    </div>
+  </div>
+
+  <div id="incentiveModal" class="overlay-modal">
+    <div class="modal-content" style="max-width:380px; padding:15px;">
+      <div style="font-size:18px; font-weight:normal; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
+        インセンティブ実績
+        <span onclick="closeIncentiveModal()" style="cursor:pointer; font-size:24px; color:#888; line-height:1;">×</span>
+      </div>
+      <div style="margin-bottom:15px; text-align:left;">
+        <label style="font-size:11px; font-weight:normal;">期間指定</label>
+        <select id="incentivePeriod" style="padding:8px; font-size:14px; margin-bottom:5px;" onchange="toggleCustomDates()">
+          <option value="1m">過去1ヶ月</option><option value="3m">過去3ヶ月</option><option value="6m">過去半年</option><option value="1y">過去1年</option><option value="custom">任意の期間</option>
+        </select>
+        <div id="customDateContainer" style="display:none; gap:5px; align-items:center; margin-bottom:5px;">
+          <input type="date" id="customStartDate" style="padding:6px; font-size:12px; flex:1;"><span style="font-weight:normal;">〜</span><input type="date" id="customEndDate" style="padding:6px; font-size:12px; flex:1;">
+        </div>
+        <button class="modal-btn-sub" style="margin-top:5px; padding:8px;" onclick="loadIncentiveData()">集計する</button>
+      </div>
+      <div style="background:#FFF9C4; border:1px solid #FBC02D; border-radius:8px; padding:10px; margin-bottom:15px;">
+        <div style="font-size:12px; font-weight:normal; color:#555;">期間内の合計インセンティブ</div>
+        <div id="totalIncentiveAmount" style="font-size:26px; font-weight:normal; color:#d32f2f;">¥0</div>
+        <div style="font-size:11px; color:#666; margin-top:4px;">売上総額: <span id="totalSalesAmount" style="font-weight:normal;">¥0</span> (計<span id="totalSalesCount" style="font-weight:normal;">0</span>件)</div>
+      </div>
+      <div style="text-align:left; font-size:11px; font-weight:normal; margin-bottom:5px; padding-bottom:5px; border-bottom:1px solid #eaeaea; display:flex;">
+        <div style="flex:2;">管理番号</div><div style="flex:1; text-align:right;">売上</div><div style="flex:1; text-align:right;">報酬</div>
+      </div>
+      <div id="incentiveList" style="max-height:300px; overflow-y:auto; text-align:left; font-size:12px;">
+        <div style="text-align:center; padding:20px; color:#888;">「集計する」を押してください</div>
+      </div>
+    </div>
+  </div>
+  
+  <div id="customNumpad" class="numpad-overlay">
+    <div style="display:flex; align-items:flex-start; margin-bottom:6px; padding:6px; background:#f9f9f9; border-radius:10px; border:1px solid #eaeaea;">
+      <img id="numpad-item-thumb" src="" style="width:58px; height:58px; object-fit:cover !important; border-radius:8px; margin-right:8px; border:none; padding:0 !important; flex-shrink:0; cursor:pointer;" onclick="showFullImage(event, this.src)">
+      <div style="flex-grow:1; display:flex; flex-direction:column; justify-content:center; height:58px;">
+        <div id="numpad-item-brand" style="font-size:11px; font-weight:normal; line-height:1.2; margin-bottom:4px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;"></div>
+        <div id="numpad-item-code" style="font-size:9px; font-weight:normal; color:#666;"></div>
+      </div>
+    </div>
+    <div class="numpad-header" style="margin-bottom:6px;">
+      <div class="numpad-display-area"><input type="text" id="numpadInput" inputmode="none" class="numpad-input-field"></div>
+      <div class="numpad-btn-group"><button class="numpad-cancel" onclick="closeNumpad()">閉じる</button><button class="numpad-close" onclick="submitMeasurement()">送信</button></div>
+    </div>
+    <div id="raglan-container" style="display:none; text-align:center; margin-bottom:6px;">
+      <label style="font-size:12px; font-weight:normal; display:inline-flex; align-items:center; gap:4px; cursor:pointer;">
+        <input type="checkbox" id="raglanCheck" onchange="updateNumpadInstruction()" style="width:16px; height:16px;"> ラグランスリーブ
+      </label>
+    </div>
+    <div id="numpad-instruction" style="font-size:9px; font-weight:normal; color:#666; margin-bottom:6px; text-align:center;">採寸箇所</div>
+    <div class="numpad-grid">
+      <button onmousedown="event.preventDefault(); typeNum('1')" ontouchstart="event.preventDefault(); typeNum('1')">1</button><button onmousedown="event.preventDefault(); typeNum('2')" ontouchstart="event.preventDefault(); typeNum('2')">2</button><button onmousedown="event.preventDefault(); typeNum('3')" ontouchstart="event.preventDefault(); typeNum('3')">3</button><button onmousedown="event.preventDefault(); typeNum('4')" ontouchstart="event.preventDefault(); typeNum('4')">4</button><button onmousedown="event.preventDefault(); typeNum('5')" ontouchstart="event.preventDefault(); typeNum('5')">5</button><button onmousedown="event.preventDefault(); typeNum('6')" ontouchstart="event.preventDefault(); typeNum('6')">6</button><button onmousedown="event.preventDefault(); typeNum('7')" ontouchstart="event.preventDefault(); typeNum('7')">7</button><button onmousedown="event.preventDefault(); typeNum('8')" ontouchstart="event.preventDefault(); typeNum('8')">8</button><button onmousedown="event.preventDefault(); typeNum('9')" ontouchstart="event.preventDefault(); typeNum('9')">9</button><button class="numpad-space" onmousedown="event.preventDefault(); typeSpace()" ontouchstart="event.preventDefault(); typeSpace()">空白</button><button onmousedown="event.preventDefault(); typeNum('0')" ontouchstart="event.preventDefault(); typeNum('0')">0</button><button class="numpad-del" onmousedown="event.preventDefault(); typeDel()" ontouchstart="event.preventDefault(); typeDel()">削除</button>
+    </div>
+  </div>
+
+  <div id="ai-running-banner" style="display:none; position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#111; color:#fff; padding:12px 20px; border-radius:30px; z-index:5000; font-size:13px; font-weight:normal; white-space:nowrap; align-items:center; gap:10px;"></div>
+
+  <script>
+    // ▼▼▼ Cloudflare R2の情報 ▼▼▼
     const R2_ACCOUNT_ID = 'a73ad889c944b152ede6d3329c545f8c';
     const R2_ACCESS_KEY = '92d4bcff0e4c138bdbcb0d4def85d114';
     const R2_SECRET_KEY = 'c0710a593132682ac557ab21b0c973974c0956ab49cb8d28a57aa67b7bc7c395';
-    const BUCKET_NAME = 'mercari-images'; // 作成したバケット名
-    const PUBLIC_URL = 'https://pub-8e4386156d26427f861486afe0381fb4.r2.dev'; // 許可したR2.devサブ 
+    const BUCKET_NAME = 'mercari-images'; 
+    const PUBLIC_URL = 'https://pub-8e4386156d26427f861486afe0381fb4.r2.dev'; 
 
     AWS.config.update({
         accessKeyId: R2_ACCESS_KEY,
@@ -91,104 +480,918 @@
     });
     const s3 = new AWS.S3({ signatureVersion: 'v4' });
 
-    // カメラの起動処理
-    const video = document.getElementById('camera-stream');
-    let capturedBlobs = []; // 撮影した画像を溜める配列
+    let lastAdminData = null; 
 
-    async function startCamera() {
+    // ★★★ 魔法の変換コード：GASの通信(google.script.run)をPythonへ流す ★★★
+    const BACKEND_URL = 'https://mercari-backend-hpof.onrender.com';
+    const rpcMethods = [
+      "getBrandList", "checkBatchFull", "reserveNewCode", "processHeavyData",
+      "getPendingMeasurements", "saveMeasurement", "getPendingPackings",
+      "getItemImagesForAdmin", "savePackingPhotoAndAssignCode", "getAdminData",
+      "replaceItemImages", "deleteAdminImage", "addAdminImages", "updateItemTextData",
+      "retryAIGeneration", "fixManagementCode", "deleteItemData", "revertPackingStatus",
+      "fetchIncentiveData", "getBatchDownloadData", "moveItemsToBatch", "saveBatchSettings"
+    ];
+    const google = {
+      script: {
+        get run() {
+          const context = {
+            _fh: null, _sh: null,
+            withFailureHandler: function(fh) { this._fh = fh; return this; },
+            withSuccessHandler: function(sh) { this._sh = sh; return this; }
+          };
+          rpcMethods.forEach(method => {
+            context[method] = function(...args) {
+              const fh = this._fh; const sh = this._sh;
+              fetch(`${BACKEND_URL}/api/rpc`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ method: method, args: args })
+              })
+              .then(res => { if(!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
+              .then(json => {
+                if(json.error) { if(fh) fh(new Error(json.error)); }
+                else { if(sh) sh(json.data); }
+              })
+              .catch(err => { if(fh) fh(err); });
+            };
+          });
+          return context;
+        }
+      }
+    };
+    // ★★★ ここまで ★★★
+
+    window.onerror = function(msg, url, line, col, error) {
+        let errDiv = document.createElement("div");
+        errDiv.style = "background:red; color:white; padding:10px; position:fixed; top:0; left:0; right:0; z-index:9999;";
+        errDiv.innerText = "システムエラー: " + msg;
+        document.body.appendChild(errDiv);
+        setTimeout(function(){ errDiv.remove(); }, 5000);
+        return false;
+    };
+
+    let activeBatchSheet = localStorage.getItem('activeBatchSheet') || "";
+
+    // ★カメラロジック★
+    let cameraStream = null;
+    let capturedBlobs = [];
+    
+    async function initCamera() {
+        if (cameraStream) return;
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment' } // 背面カメラを指定
-            });
-            video.srcObject = stream;
-        } catch (err) {
-            document.getElementById('status').innerText = "カメラの起動に失敗しました。ブラウザのカメラ許可を確認してください。";
+            cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            document.getElementById('camera-stream').srcObject = cameraStream;
+        } catch (e) { console.error("Camera error:", e); }
+    }
+
+    function stopCamera() {
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
+            cameraStream = null;
         }
     }
-    startCamera(); // ページを開いたら即カメラ起動
 
-    // 撮影ボタンを押した時の処理
     function takePhoto() {
-        if (capturedBlobs.length >= 20) {
-            alert("最大20枚までです"); return;
-        }
-
+        if(capturedBlobs.length >= 20) { alert("最大20枚までです"); return; }
+        const video = document.getElementById('camera-stream');
         const canvas = document.getElementById('capture-canvas');
         const ctx = canvas.getContext('2d');
-        
-        // ビデオの映像の「中央の正方形」を計算して切り抜く
         const size = Math.min(video.videoWidth, video.videoHeight);
         const startX = (video.videoWidth - size) / 2;
         const startY = (video.videoHeight - size) / 2;
-
-        // キャンバス(800x800)に1:1で描画
         ctx.drawImage(video, startX, startY, size, size, 0, 0, 800, 800);
-
-        // JPEGに圧縮して保存
+        
         canvas.toBlob((blob) => {
             capturedBlobs.push(blob);
             renderPreviews();
         }, 'image/jpeg', 0.6);
     }
 
-    // プレビューの表示
     function renderPreviews() {
         const list = document.getElementById('preview-list');
         list.innerHTML = '';
-        capturedBlobs.forEach((blob, index) => {
+        capturedBlobs.forEach((blob, idx) => {
             const url = URL.createObjectURL(blob);
-            list.innerHTML += `
-                <div class="preview-item">
-                    <img src="${url}" class="preview-img">
-                    <button class="delete-btn" onclick="deletePhoto(${index})">×</button>
-                </div>
-            `;
+            list.innerHTML += `<div class="preview-item"><img src="${url}" class="preview-img"><button type="button" class="delete-btn-cam" onclick="deletePhoto(${idx})">×</button></div>`;
         });
     }
 
-    // 写真の削除
-    function deletePhoto(index) {
-        capturedBlobs.splice(index, 1);
+    function deletePhoto(idx) {
+        capturedBlobs.splice(idx, 1);
         renderPreviews();
     }
 
-    // 全画像のアップロード処理
-    async function uploadAllImages() {
-        const code = document.getElementById('management-code').value.trim();
-        if (!code) { alert("管理番号を入力してください"); return; }
-        if (capturedBlobs.length === 0) { alert("写真を撮影してください"); return; }
+    function switchScreen(id) {
+      document.querySelectorAll('.sub-container').forEach(function(e) { e.style.display = 'none'; });
+      document.getElementById('screen-menu').style.display = 'none';
+      document.getElementById('customNumpad').style.display = 'none'; 
+      document.getElementById(id).style.display = 'block';
+      window.scrollTo(0, 0);
+      if (id !== 'screen-new') stopCamera(); 
+    }
+    
+    function checkAndGoNew() {
+      showLoading("空き枠を確認中...");
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
+      .withSuccessHandler(function(isFull){
+        hideLoading();
+        if(isFull) {
+          alert("設定の上限数を超えているため、ダッシュボードから新たに枠を作ってください。");
+        } else {
+          switchScreen('screen-new');
+          initCamera(); 
+        }
+      }).checkBatchFull(activeBatchSheet);
+    }
 
-        const uploadBtn = document.getElementById('upload-btn');
-        const status = document.getElementById('status');
-        uploadBtn.disabled = true;
-        status.innerText = "送信中... (0 / " + capturedBlobs.length + ")";
+    function showLoading(t) { document.getElementById('loadingText').innerText = t; document.getElementById('loadingOverlay').style.display = 'flex'; }
+    function hideLoading() { document.getElementById('loadingOverlay').style.display = 'none'; }
 
-        let successCount = 0;
+    function showFullImage(e, url) {
+      e.stopPropagation();
+      if(!url) return;
+      document.getElementById('fullImagePreview').src = url;
+      document.getElementById('imagePreviewModal').style.display = 'flex';
+    }
+
+    document.addEventListener('DOMContentLoaded', function() { 
+      let g = localStorage.getItem('dailyMeasureGoal'); 
+      if(g) { let dailyGoalInput = document.getElementById('dailyGoalInput'); if(dailyGoalInput) dailyGoalInput.value = g; }
+      google.script.run
+      .withFailureHandler(function(e){ console.error(e); })
+      .withSuccessHandler(function(res) {
+        if(res && res.config && !activeBatchSheet) {
+          activeBatchSheet = res.config.sheetName;
+          localStorage.setItem('activeBatchSheet', activeBatchSheet);
+        }
+      }).getAdminData("");
+    });
+    
+    function saveDailyGoal(){ let v=document.getElementById('dailyGoalInput').value; if(!v||v<=0){alert("正しい目標件数を入力してください");return;} localStorage.setItem('dailyMeasureGoal',v); alert(`目標を${v}件に設定しました`); }
+    function checkDailyGoalAlert(){
+      let g=parseInt(localStorage.getItem('dailyMeasureGoal')); if(!g||g<=0)return;
+      let d=new Date().toLocaleDateString(); let sd=localStorage.getItem('dailyMeasureDate'); let c=parseInt(localStorage.getItem('dailyMeasureCount'))||0;
+      if(sd!==d){c=0; localStorage.setItem('dailyMeasureDate',d);}
+      c++; localStorage.setItem('dailyMeasureCount',c);
+      setTimeout(function(){ if(c<g)alert(`目標まで残り ${g-c} 件！`); else alert(`目標達成！目標＋${c-g} 件！`); },500);
+    }
+
+    let isUploadingBackground=false;
+
+    function saveDraftData(){
+      if(isUploadingBackground) return; 
+      if(document.getElementById('screen-new').style.display==='none')return;
+      let rMat = document.querySelector('input[name="materialRadio"]:checked');
+      let rSize = document.querySelector('input[name="size"]:checked');
+      const d={ 
+        brand:document.getElementById('brand').value, brandId:document.getElementById('brandId').value, 
+        materialRadio: rMat ? rMat.value : '', materialOther:document.getElementById('materialOther').value, 
+        freeKeywords:document.getElementById('freeKeywords').value, statusText:document.getElementById('statusText').value, 
+        size: rSize ? rSize.value : '', sizeOtherText:document.getElementById('sizeOtherText').value, 
+        categoryText:document.getElementById('finalCategoryText').value 
+      };
+      localStorage.setItem('factoryDraftFormData',JSON.stringify(d));
+    }
+    
+    function restoreDraftData(){
+      try{ const s=localStorage.getItem('factoryDraftFormData'); if(!s)return; const d=JSON.parse(s);
+        if(d.brand){document.getElementById('brand').value=d.brand; document.getElementById('brand').classList.add('is-filled');}
+        if(d.brandId)document.getElementById('brandId').value=d.brandId;
+        if(d.materialRadio){let r=document.querySelector(`input[name="materialRadio"][value="${d.materialRadio}"]`); if(r)r.checked=true; if(d.materialRadio==='その他'){document.getElementById('materialOther').style.display='block'; document.getElementById('materialOther').value=d.materialOther||'';}}
+        if(d.freeKeywords)document.getElementById('freeKeywords').value=d.freeKeywords;
+        if(d.statusText)document.getElementById('statusText').value=d.statusText;
+        if(d.size){let r=document.querySelector(`input[name="size"][value="${d.size}"]`); if(r)r.checked=true;}
+        if(d.sizeOtherText)document.getElementById('sizeOtherText').value=d.sizeOtherText;
+        if(d.categoryText){let p=d.categoryText.split(/⇒|＞|>|\||\//).map(function(x){return x.trim()}).filter(function(x){return x}); restoreCategoryTree(p);}
+      }catch(e){ console.error("Restore Error:", e); }
+    }
+    
+    document.addEventListener('DOMContentLoaded',function(){ 
+        document.querySelectorAll('input,select,textarea').forEach(function(i){ 
+            i.addEventListener('input',saveDraftData); i.addEventListener('change',saveDraftData); 
+        }); 
+        document.querySelectorAll('input[name="materialRadio"]').forEach(function(r){ 
+            r.addEventListener('change',function(){ document.getElementById('materialOther').style.display=(this.value==='その他')?'block':'none'; }); 
+        }); 
+        setInterval(function() {
+          if(!isUploadingBackground && document.getElementById('screen-new').style.display !== 'none') saveDraftData();
+        }, 1000);
+    });
+
+    function compressImage(file, maxSide = 800, quality = 0.5) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let w = img.width, h = img.height;
+            if (w > h) { if (w > maxSide) { h *= maxSide / w; w = maxSide; } } else { if (h > maxSide) { w *= maxSide / h; h = maxSide; } }
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          };
+          img.onerror = reject; img.src = e.target.result;
+        };
+        reader.onerror = reject; reader.readAsDataURL(file);
+      });
+    }
+
+    let pendingUploadData=null; 
+    
+    async function startSubmissionProcess(){
+      if(isUploadingBackground){alert("前の処理をお待ちください");return;}
+      let b=document.getElementById('brand').value.trim(); let s=document.getElementById('statusText').value;
+      let rSize = document.querySelector('input[name="size"]:checked'); let sz = rSize ? rSize.value : document.getElementById('sizeOtherText').value.trim();
+      let cId=document.getElementById('finalCategoryId').value;
+      if(capturedBlobs.length === 0 || !b || !sz || !cId){alert("必須項目が未入力、または写真がありません");return;}
+      
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      showLoading("R2へ画像を直接送信中...");
+
+      google.script.run
+      .withFailureHandler(function(e){hideLoading();alert("エラー:"+e.message);})
+      .withSuccessHandler(async function(res){
+        if(res.error){hideLoading();alert(res.error);return;}
+        
+        let targetCode = res.code; 
+        let uploadErrors = 0;
 
         for (let i = 0; i < capturedBlobs.length; i++) {
-            const fileName = `${code}-${i + 1}.jpg`;
-            const params = {
-                Bucket: BUCKET_NAME,
-                Key: fileName,
-                Body: capturedBlobs[i],
-                ContentType: 'image/jpeg'
-            };
-
-            try {
-                await s3.putObject(params).promise();
-                successCount++;
-                status.innerText = `送信中... (${successCount} / ${capturedBlobs.length})`;
-            } catch (err) {
-                alert(fileName + "の送信に失敗しました: " + err.message);
-            }
+            const fileName = `${targetCode}-${i + 1}.jpg`;
+            const params = { Bucket: BUCKET_NAME, Key: fileName, Body: capturedBlobs[i], ContentType: 'image/jpeg' };
+            try { await s3.putObject(params).promise(); } catch (err) { uploadErrors++; console.error("R2 Upload Error:", err); }
         }
+        
+        if (uploadErrors > 0) alert(`${uploadErrors}枚の画像送信に失敗しました。`);
 
-        status.innerText = "全画像の送信が完了しました！";
-        uploadBtn.disabled = false;
-        capturedBlobs = []; // 送信完了後にリセット
-        renderPreviews();
+        let rMat = document.querySelector('input[name="materialRadio"]:checked'); let mat = rMat ? rMat.value : '';
+        if(mat==='その他')mat=document.getElementById('materialOther').value.trim();
+        
+        const aiThumbBase64 = await new Promise(resolve => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result.split(',')[1]);
+            reader.readAsDataURL(capturedBlobs[0]);
+        });
+
+        let dummyImages = capturedBlobs.map((b, idx) => {
+            if (idx === 0) return { mimeType: 'image/jpeg', data: aiThumbBase64 };
+            return { mimeType: 'image/jpeg', data: "DUMMY" }; 
+        });
+        
+        pendingUploadData = {
+          code: targetCode, brand: b, brandId: document.getElementById('brandId').value, keywords: document.getElementById('freeKeywords').value.trim(),
+          materialText: mat||"", statusText: s, sizeInput: sz, categoryId: cId, categoryText: document.getElementById('finalCategoryText').value,
+          images: dummyImages, thumbData: ""
+        };
+        
+        hideLoading(); 
+        document.getElementById('assignedCodeDisplay').innerText = res.displayCount + "点目"; 
+        document.getElementById('assignedCodeModal').style.display='flex';
+      }).reserveNewCode(activeBatchSheet);
     }
-</script>
+    
+    function closeAssignedCodeModal(){
+      isUploadingBackground=true; 
+      document.getElementById('assignedCodeModal').style.display='none'; 
+      document.getElementById('form-new').reset(); 
+      document.getElementById('materialOther').style.display='none'; 
+      renderDropdowns(categoryTree,0,[]); 
+      localStorage.removeItem('factoryDraftFormData'); 
+      document.getElementById('submitNewBtn').disabled=true; 
+      document.getElementById('submitNewBtn').innerText="処理中..."; 
+      document.getElementById('bg-status-badge').style.display="block";
+      
+      capturedBlobs = []; renderPreviews();
 
+      google.script.run.withFailureHandler(function(e){ 
+          isUploadingBackground=false; document.getElementById('submitNewBtn').disabled=false; document.getElementById('submitNewBtn').innerText="送信する"; document.getElementById('bg-status-badge').style.display="none";
+          alert("通信エラーが発生しました。\n詳細: " + (e.message || "タイムアウト")); 
+      }).withSuccessHandler(function(res){ 
+          isUploadingBackground=false; pendingUploadData=null; document.getElementById('submitNewBtn').disabled=false; document.getElementById('submitNewBtn').innerText="送信する"; document.getElementById('bg-status-badge').style.display="none"; 
+          if(res && res.error && !res.error.includes("一部の画像")) alert(res.error); 
+      }).processHeavyData(pendingUploadData.code,pendingUploadData, activeBatchSheet);
+    }
+
+    let currentMeasureCode=null; let pendingMeasurementsData=[]; 
+    
+    function insertAtCursor(val) {
+        let el = document.getElementById('numpadInput'); let start = el.selectionStart; let end = el.selectionEnd; let text = el.value;
+        el.value = text.substring(0, start) + val + text.substring(end);
+        el.setSelectionRange(start + val.length, start + val.length); el.focus();
+    }
+    function typeNum(n) { insertAtCursor(n); } function typeSpace() { insertAtCursor(' '); }
+    function typeDel() {
+        let el = document.getElementById('numpadInput'); let start = el.selectionStart; let end = el.selectionEnd; let text = el.value;
+        if (start === end && start > 0) { el.value = text.substring(0, start - 1) + text.substring(end); el.setSelectionRange(start - 1, start - 1); } 
+        else if (start !== end) { el.value = text.substring(0, start) + text.substring(end); el.setSelectionRange(start, start); }
+        el.focus();
+    }
+
+    function populateMeasureFilter() {
+        let cats = new Set();
+        pendingMeasurementsData.forEach(function(i) {
+            let parts = (i.categoryText || "").split(/>/).map(function(s){return s.trim()});
+            let cat = parts.length > 1 ? parts[1] : (parts.length > 0 ? parts[0] : "未分類");
+            cats.add(cat);
+        });
+        let sel = document.getElementById('measureCategoryFilter'); let html = '<option value="">全て表示</option>';
+        cats.forEach(function(c) { html += `<option value="${c}">${c}</option>` });
+        sel.innerHTML = html;
+    }
+
+    function renderMeasureList() {
+        let sel = document.getElementById('measureCategoryFilter').value; let list = pendingMeasurementsData;
+        if(sel) {
+            list = list.filter(function(i) {
+                let parts = (i.categoryText || "").split(/>/).map(function(s){return s.trim()});
+                let cat = parts.length > 1 ? parts[1] : (parts.length > 0 ? parts[0] : "未分類");
+                return cat === sel;
+            });
+        }
+        document.getElementById('measure-list').innerHTML=list.map(function(i){
+            let thumb = i.thumbUrl ? i.thumbUrl : 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+            let dispCode = i.code.startsWith("TMP-") ? "未付番" : i.code;
+            return `<div class="item-card" onclick="openNumpad('${i.code}')"><img src="${thumb}" class="item-thumb"><div class="item-info"><div class="item-brand-main">${i.brand}</div><div class="item-code-sub">${dispCode}</div></div><div style="font-weight:normal;font-size:18px;">＋</div></div>`
+        }).join('');
+    }
+
+    function loadPendingMeasurements(){
+      showLoading("読込中..."); 
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
+      .withSuccessHandler(function(list){ 
+        hideLoading(); pendingMeasurementsData=list;
+        document.getElementById('measure-count-badge').innerText=list.length+"件";
+        if(!list.length){document.getElementById('measure-list').innerHTML='<div class="empty-state">ありません</div>';return;}
+        populateMeasureFilter(); renderMeasureList();
+      }).getPendingMeasurements(activeBatchSheet);
+    }
+
+    function updateNumpadInstruction() {
+        let item = pendingMeasurementsData.find(function(i){return i.code===currentMeasureCode});
+        let catText = (item && item.categoryText) ? item.categoryText : '';
+        let isBottoms = (catText.includes('パンツ')||catText.includes('スカート')||catText.includes('ボトムス'));
+        let isRaglan = document.getElementById('raglanCheck').checked;
+        if (isBottoms) document.getElementById('numpad-instruction').innerText = "W / 全長 / 股下 / 裾幅 / わたり";
+        else if (isRaglan) document.getElementById('numpad-instruction').innerText = "着丈 / 身幅 / 裄丈";
+        else document.getElementById('numpad-instruction').innerText = "肩幅 / 着丈 / 身幅 / 袖丈";
+    }
+
+    function openNumpad(c){
+      currentMeasureCode=c; 
+      document.getElementById('numpadInput').value = ""; document.getElementById('raglanCheck').checked = false;
+      let item=pendingMeasurementsData.find(function(i){return i.code===c});
+      let thumb = (item && item.thumbUrl) ? item.thumbUrl : ''; let brand = (item && item.brand) ? item.brand : '不明'; let catText = (item && item.categoryText) ? item.categoryText : '';
+      document.getElementById('numpad-item-thumb').src=thumb; document.getElementById('numpad-item-brand').innerText=brand; 
+      document.getElementById('numpad-item-code').innerText= c.startsWith("TMP-") ? "未付番" : c;
+      let isBottoms = (catText.includes('パンツ')||catText.includes('スカート')||catText.includes('ボトムス'));
+      document.getElementById('raglan-container').style.display = isBottoms ? 'none' : 'block';
+      updateNumpadInstruction(); 
+      document.getElementById('customNumpad').style.display='block';
+      setTimeout(function() { document.getElementById('numpadInput').focus() }, 100);
+    }
+    
+    function closeNumpad(){document.getElementById('customNumpad').style.display='none';}
+    
+    function submitMeasurement(){ 
+      let el = document.getElementById('numpadInput'); let d = el.value.trim(); 
+      if(!d||!confirm(`確定しますか？ [${d}]`))return; 
+      let isRaglan = document.getElementById('raglanCheck').checked; if (isRaglan) d = "R " + d;
+      showLoading("送信中..."); 
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
+      .withSuccessHandler(function(r){
+        hideLoading();
+        if(r==="OK"){ document.getElementById('customNumpad').style.display='none'; loadPendingMeasurements(); checkDailyGoalAlert(); } else alert("エラー: " + r);
+      }).saveMeasurement(currentMeasureCode, d, activeBatchSheet); 
+    }
+
+    let currentPackCode=null; let pendingPackingsData=[]; 
+    
+    function populatePackFilter() {
+        let cats = new Set();
+        pendingPackingsData.forEach(function(i) {
+            let parts = (i.categoryText || "").split(/>/).map(function(s){return s.trim()});
+            let cat = parts.length > 1 ? parts[1] : (parts.length > 0 ? parts[0] : "未分類");
+            cats.add(cat);
+        });
+        let sel = document.getElementById('packCategoryFilter'); let html = '<option value="">全て表示</option>';
+        cats.forEach(function(c) { html += `<option value="${c}">${c}</option>` });
+        sel.innerHTML = html;
+    }
+
+    function renderPackList() {
+        let sel = document.getElementById('packCategoryFilter').value; let list = pendingPackingsData;
+        if(sel) {
+            list = list.filter(function(i) {
+                let parts = (i.categoryText || "").split(/>/).map(function(s){return s.trim()});
+                let cat = parts.length > 1 ? parts[1] : (parts.length > 0 ? parts[0] : "未分類");
+                return cat === sel;
+            });
+        }
+        document.getElementById('pack-list').innerHTML=list.map(function(i){
+            let thumb = i.thumbUrl ? i.thumbUrl : ''; let dispCode = i.code.startsWith("TMP-") ? "未付番" : i.code;
+            return `<div class="item-card" onclick="openPackConfirmModal('${i.code}')"><img src="${thumb}" class="item-thumb" onclick="showFullImage(event, '${thumb}')"><div class="item-info"><div class="item-brand-main">${i.brand}</div><div class="item-code-sub">${dispCode}</div></div><div style="font-weight:normal;">撮影</div></div>`
+        }).join('');
+    }
+
+    function loadPendingPackings(){
+      showLoading("読込中..."); 
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
+      .withSuccessHandler(function(list){ 
+        hideLoading(); pendingPackingsData=list;
+        document.getElementById('pack-count-badge').innerText=list.length+"件";
+        if(!list.length){document.getElementById('pack-list').innerHTML='<div class="empty-state">ありません</div>';return;}
+        populatePackFilter(); renderPackList();
+      }).getPendingPackings(activeBatchSheet);
+    }
+    
+    function openPackConfirmModal(c) {
+      currentPackCode = c; let item = pendingPackingsData.find(function(i){return i.code === c});
+      let brand = item ? item.brand : "";
+      document.getElementById('packConfirmBrand').innerText = brand;
+      document.getElementById('packConfirmGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>画像を読込中...</div>';
+      document.getElementById('packConfirmModal').style.display = 'flex';
+      google.script.run
+      .withFailureHandler(function(e){ document.getElementById('packConfirmGallery').innerHTML = '<div style="font-size:10px; color:red;">エラー: '+e.message+'</div>'; })
+      .withSuccessHandler(function(res){
+        if(res.error) { document.getElementById('packConfirmGallery').innerHTML = '<div style="font-size:10px; color:red;">エラー: '+res.error+'</div>'; return; }
+        let html = "";
+        if(!res.images || res.images.length === 0) { html = '<div style="font-size:10px; color:#666;">画像がありません</div>'; }
+        else {
+           res.images.forEach(function(img){
+              let src = img.url ? img.url : 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+              html += `<div class="admin-image-item"><img src="${src}" class="admin-image-img" onclick="showFullImage(event, '${src}')"></div>`;
+           });
+        }
+        document.getElementById('packConfirmGallery').innerHTML = html;
+      }).getItemImagesForAdmin(activeBatchSheet, c);
+    }
+    
+    function closePackConfirmModal() { document.getElementById('packConfirmModal').style.display = 'none'; }
+    function executePackPhoto() { closePackConfirmModal(); document.getElementById('packImageInput').click(); }
+    function executePackPhotoFolder() { closePackConfirmModal(); document.getElementById('packImageInputFolder').click(); }
+    
+    document.getElementById('packImageInput').addEventListener('change', async function(){ 
+      if(!this.files.length) return; 
+      showLoading("梱包写真を圧縮中..."); 
+      try {
+        let b = (await compressImage(this.files[0], 800, 0.5)).split(',')[1]; 
+        showLoading("梱包完了処理中...");
+        google.script.run
+        .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
+        .withSuccessHandler(function(res){
+          hideLoading(); document.getElementById('packImageInput').value='';
+          if(res.status === "OK") {
+            if(res.isNewlyAssigned) { document.getElementById('finalAssignedCodeText').innerText = res.finalCode; document.getElementById('finalAssignedCodeModal').style.display = 'flex'; } 
+            else alert("梱包完了しました！（既に付与済みの番号です）"); 
+            loadPendingPackings();
+          } else alert(res.error); 
+        }).savePackingPhotoAndAssignCode(currentPackCode, b, activeBatchSheet);
+      } catch(e) { hideLoading(); alert(e); } 
+    });
+
+    document.getElementById('packImageInputFolder').addEventListener('change', async function(){ 
+      if(!this.files.length) return; 
+      showLoading("梱包写真を圧縮中..."); 
+      try {
+        let b = (await compressImage(this.files[0], 800, 0.5)).split(',')[1]; 
+        showLoading("梱包完了処理中...");
+        google.script.run
+        .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
+        .withSuccessHandler(function(res){
+          hideLoading(); document.getElementById('packImageInputFolder').value='';
+          if(res.status === "OK") {
+            if(res.isNewlyAssigned) { document.getElementById('finalAssignedCodeText').innerText = res.finalCode; document.getElementById('finalAssignedCodeModal').style.display = 'flex'; } 
+            else alert("梱包完了しました！（既に付与済みの番号です）");
+            loadPendingPackings();
+          } else alert(res.error);
+        }).savePackingPhotoAndAssignCode(currentPackCode, b, activeBatchSheet);
+      } catch(e) { hideLoading(); alert(e); } 
+    });
+
+    function closeFinalAssignedCodeModal() { document.getElementById('finalAssignedCodeModal').style.display = 'none'; }
+
+    let currentAdminSheet="";
+
+    function toggleMovePanel() {
+      let checked = document.querySelectorAll('.admin-item-check:checked');
+      let panel = document.getElementById('admin-move-panel');
+      if (checked.length > 0) panel.style.display = 'flex'; else panel.style.display = 'none';
+    }
+
+    function updateMoveTargetDropdown(allSheets) {
+      let html = '<option value="" disabled selected>移動先バッチを選択</option>';
+      allSheets.forEach(s => { if (s !== currentAdminSheet) html += `<option value="${s}">${s}</option>`; });
+      document.getElementById('adminMoveTargetBatch').innerHTML = html;
+    }
+
+    function executeMoveItems() {
+      let checkedNodes = document.querySelectorAll('.admin-item-check:checked');
+      let codes = Array.from(checkedNodes).map(n => n.value); let targetSheet = document.getElementById('adminMoveTargetBatch').value;
+      if (codes.length === 0) return alert("アイテムが選択されていません"); if (!targetSheet) return alert("移動先のバッチを選択してください");
+      if (!confirm(`${codes.length}件のアイテムを\n${targetSheet}\nへ移動しますか？`)) return;
+      showLoading("移動中...");
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
+      .withSuccessHandler(function(r){
+        hideLoading();
+        if (r.startsWith("OK")) { alert("移動が完了しました！"); document.getElementById('admin-move-panel').style.display = 'none'; loadAdminList(currentAdminSheet); } 
+        else alert("エラー: " + r); 
+      }).moveItemsToBatch(currentAdminSheet, targetSheet, codes);
+    }
+
+    function openBatchSettingsModal(){document.getElementById('batchSettingsModal').style.display='flex';} function closeBatchSettingsModal(){document.getElementById('batchSettingsModal').style.display='none';}
+    function submitBatchSettings(){ 
+      let p=document.getElementById('batchPrefix').value.trim(),s=parseInt(document.getElementById('batchStart').value),e=parseInt(document.getElementById('batchEnd').value),sx=document.getElementById('batchSuffix').value.trim(); 
+      if(!p||!s||!e||!sx||s>=e)return alert("入力エラー"); let n=`${p}${s}${sx}〜${p}${e}${sx}`; 
+      if(!confirm(`作成しますか？${n}`))return; closeBatchSettingsModal(); showLoading("作成中..."); 
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
+      .withSuccessHandler(function(r){
+        hideLoading();
+        if(r==="OK"){ activeBatchSheet = n; localStorage.setItem('activeBatchSheet', activeBatchSheet); loadAdminList(activeBatchSheet); } else alert(r);
+      }).saveBatchSettings({sheetName:n,prefix:p,start:s,end:e,suffix:sx}); 
+    }
+
+    function loadAdminList(target=""){
+      showLoading("読込中..."); 
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
+      .withSuccessHandler(function(res){ 
+        hideLoading(); if(!res.config)return; 
+        currentAdminSheet=res.currentViewSheet; lastAdminData = res.itemMap; 
+        activeBatchSheet = currentAdminSheet; localStorage.setItem('activeBatchSheet', activeBatchSheet);
+        
+        let p="OM", st=1, sx="HG", en=0, m=currentAdminSheet.match(/^([A-Za-z]+)(\d+)([A-Za-z]+)〜([A-Za-z]+)(\d+)([A-Za-z]+)$/);
+        if(m){p=m[1];st=parseInt(m[2]);sx=m[3];en=parseInt(m[5]);}
+
+        let listedCnt=0, measuredCnt=0, packedCnt=0;
+        Object.keys(res.itemMap).forEach(k => {
+          let d = res.itemMap[k];
+          if(d) {
+            listedCnt++;
+            if(d.dims || d.packStatus==="梱包完了" || d.shipStatus==="配送完了") measuredCnt++;
+            if(d.packStatus==="梱包完了" || d.shipStatus==="配送完了") packedCnt++;
+          }
+        });
+
+        let tot=0; if(en>0) tot = en - st + 1; else tot = listedCnt || 1;
+        document.getElementById('currentBatchDisplay').innerHTML = currentAdminSheet + "<br><span style='font-size:12px;'>(登録:" + listedCnt + "/" + tot + ")</span>";
+        document.getElementById('admin-sheet-tabs').innerHTML=res.allSheets.map(function(s){
+            let tabClass = s===currentAdminSheet ? 'admin-tab-active' : 'admin-tab-inactive';
+            let tabText = s===activeBatchSheet ? `[作業中] ${s}` : s;
+            return `<div class="admin-tab ${tabClass}" onclick="loadAdminList('${s}')">${tabText}</div>`
+        }).join('');
+        
+        let html='<div class="batch-grid">', shc=0;
+        let renderItm=function(c,d,idx){ 
+          let t = (d && d.thumbUrl) ? `<img src="${d.thumbUrl}" style="width:30px;height:30px;object-fit:cover;flex-shrink:0;margin-right:4px;border-radius:4px;">` : ''; 
+          let dispName = c.startsWith("TMP-") ? "未付番" : c; 
+          let chk = `<input type="checkbox" class="admin-item-check" value="${c}" onclick="event.stopPropagation(); toggleMovePanel();" style="position:absolute; top:2px; right:2px; width:14px; height:14px;">`;
+          return `${chk}<div style="display:flex;align-items:center;width:100%;height:100%; padding-left:4px; padding-right:16px;">${t}<span style="font-size:9px;font-weight:normal;line-height:1.1;">${dispName}</span></div>`; 
+        };
+        
+        let addHtml=function(c, idx){
+          let d=res.itemMap[c]; 
+          if(!d){ html+=`<div class="batch-item item-empty" style="padding-left:10px;"><div style="display:flex;align-items:center;"><span style="font-size:10px;">${c}</span></div></div>`; return; }
+          let sd=encodeURIComponent(JSON.stringify(d)).replace(/'/g,"%27");
+          let hasAIError = (d.desc && d.desc.includes("※AIエラー発生")); let isGenerated = !(!d.title || d.title.trim() === "" || !d.desc || d.desc.trim() === "" || hasAIError);
+          let isMeasured = (d.dims && d.dims.trim() !== ""); let isPacked = (d.packStatus === "梱包完了"); let isShipped = (d.shipStatus === "配送完了");
+          if(isShipped) shc++;
+          let modalErrReason = "";
+          let isMissingImg = (d.missingImages && d.missingImages.length > 0);
+          if(hasAIError) modalErrReason = "AIエラー（再生成してください）"; else if(!isGenerated) modalErrReason = "文章未生成（一括生成待ち）";
+          if(isMissingImg) modalErrReason = (modalErrReason ? modalErrReason + " / " : "") + "画像欠損(" + d.missingImages.length + "枚)";
+
+          let bgClass = "item-active"; 
+          if(isPacked) bgClass = "item-packed"; else if(isMeasured) bgClass = "item-measured";
+          let borderStyle = "";
+          if (hasAIError || !isGenerated || isMissingImg) borderStyle = "border: 3px solid #d32f2f !important;"; else borderStyle = "border: 1px solid #ccc !important; opacity: 0.9;";
+          if(isShipped) borderStyle += " opacity: 0.4;";
+
+          html+=`<div class="batch-item ${bgClass}" style="${borderStyle}" onclick="openEditModal('${c}',${isPacked},'${sd}','${modalErrReason}')">${renderItm(c,d,idx)}</div>`;
+        };
+        
+        if(en>0){
+          let existingCodes = []; let tmpCodes = []; let unassignedCodes = [];
+          for(let i=st; i<=en; i++){ let c = `${p}${i}${sx}`; if (res.itemMap[c]) existingCodes.push(c); else unassignedCodes.push(c); }
+          Object.keys(res.itemMap).forEach(function(k){ if(k.startsWith("TMP-")) tmpCodes.push(k); });
+          let emptyCount = Math.max(0, unassignedCodes.length - tmpCodes.length); let emptyCodesToRender = unassignedCodes.slice(0, emptyCount);
+          let globalIdx = 1;
+          existingCodes.forEach(c => { addHtml(c, globalIdx++); }); tmpCodes.forEach(c => { addHtml(c, globalIdx++); }); emptyCodesToRender.forEach(c => { addHtml(c, globalIdx++); });
+        } else {
+          let globalIdx = 1; Object.keys(res.itemMap).forEach(function(k){ addHtml(k, globalIdx++); });
+        }
+        
+        document.getElementById('admin-list').innerHTML=html+'</div>'+(shc>0?`<div style="margin-top:20px;text-align:center;color:#888;font-size:12px;font-weight:normal;">配送完了：${shc}件</div>`:'');
+        updateMoveTargetDropdown(res.allSheets); toggleMovePanel();
+      }).getAdminData(target);
+    }
+
+    let currentEditCode="";
+    function openEditModal(c,isP,ds,errReason){ 
+      currentEditCode=c; let d=JSON.parse(decodeURIComponent(ds)); 
+      document.getElementById('editOldCodeDisplay').innerText = c.startsWith("TMP-") ? "未付番" : c; 
+      document.getElementById('editOldCodeInput').value=c; document.getElementById('editNewCodeInput').value=""; 
+      if(errReason && errReason !== "undefined" && errReason !== "") {
+        document.getElementById('editErrorReason').style.display = 'block'; document.getElementById('editErrorReason').innerText = "エラー/通知： " + errReason;
+      } else document.getElementById('editErrorReason').style.display = 'none';
+      
+      let thumb = (d && d.thumbUrl) ? d.thumbUrl : '';
+      document.getElementById('editItemImage').src=thumb; document.getElementById('editItemImage').style.display=thumb?'block':'none'; 
+      document.getElementById('editItemStatus').value= (d && d.statusText) ? d.statusText : "目立った傷や汚れなし";
+      document.getElementById('editTextTitle').value= (d && d.title) ? d.title : ""; 
+      document.getElementById('editTextDesc').value= (d && d.desc) ? d.desc : ""; 
+      document.getElementById('editTextDims').value= (d && d.dims) ? d.dims : ""; 
+      document.getElementById('revertPackBtn').style.display = isP ? 'block' : 'none';
+      document.getElementById('editCodeModal').style.display='flex'; 
+
+      document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>画像を取得中...</div>';
+      google.script.run
+      .withFailureHandler(function(e){ document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:red;">エラー: '+e.message+'</div>'; })
+      .withSuccessHandler(function(res){
+        if(res.error) { document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:red;">エラー: '+res.error+'</div>'; return; }
+        renderAdminImages(res.images);
+      }).getItemImagesForAdmin(currentAdminSheet, c);
+    }
+
+    function renderAdminImages(images) {
+      let html = "";
+      if(!images || images.length === 0) {
+         html = '<div style="font-size:10px; color:#666;">画像がありません</div>';
+      } else {
+          images.forEach(img => {
+            let src = img.url ? img.url : 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+            html += `<div class="admin-image-item">
+                       <img src="${src}" class="admin-image-img" onclick="showFullImage(event, '${src}')">
+                       <div class="admin-image-delete" onclick="deleteAdminImageExecute('${img.name}')">×</div>
+                     </div>`;
+          });
+      }
+      document.getElementById('adminImageGallery').innerHTML = html;
+    }
+
+    async function executeBulkReplaceImages(input) {
+      if(!input.files || input.files.length === 0) return;
+      if(!confirm("現在の【商品画像】をすべて削除し、選択した画像で上書きします。\nよろしいですか？\n（※梱包写真は削除されません）")) { input.value = ""; return; }
+      
+      showLoading("画像を極限圧縮中...");
+      try {
+        const compressedResults = await Promise.all( Array.from(input.files).map(file => compressImage(file)) );
+        
+        showLoading("R2へアップロード中...");
+        let uploadErrors = 0;
+        for (let i = 0; i < compressedResults.length; i++) {
+            const blob = await (await fetch(compressedResults[i])).blob();
+            const fileName = `${currentEditCode}-${i + 1}.jpg`;
+            const params = { Bucket: BUCKET_NAME, Key: fileName, Body: blob, ContentType: 'image/jpeg' };
+            try { await s3.putObject(params).promise(); } catch (err) { uploadErrors++; }
+        }
+        
+        if (uploadErrors > 0) alert(`${uploadErrors}枚の画像送信に失敗しました。`);
+
+        let base64Images = compressedResults.map(c => ({ mimeType: 'image/jpeg', data: c.split(',')[1] }));
+        google.script.run
+        .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); input.value = ""; })
+        .withSuccessHandler(function(r){
+          input.value = ""; hideLoading();
+          if(r === "OK") {
+            alert("画像の一括入れ替えが完了しました！");
+            document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>更新中...</div>';
+            google.script.run.withSuccessHandler(res => renderAdminImages(res.images)).getItemImagesForAdmin(currentAdminSheet, currentEditCode);
+          } else { alert(r); }
+        }).replaceItemImages(currentAdminSheet, currentEditCode, base64Images);
+      } catch(e) { hideLoading(); input.value = ""; alert(e.message); }
+    }
+
+    function deleteAdminImageExecute(imgName) {
+      if(!confirm("この画像を削除しますか？")) return;
+      showLoading("削除中...");
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
+      .withSuccessHandler(function(r){
+        hideLoading();
+        if(r === "OK") {
+          document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>更新中...</div>';
+          google.script.run.withSuccessHandler(res => renderAdminImages(res.images)).getItemImagesForAdmin(currentAdminSheet, currentEditCode);
+        } else alert(r);
+      }).deleteAdminImage(currentAdminSheet, currentEditCode, imgName);
+    }
+
+    async function uploadExtraImagesAdmin(input) {
+      if(!input.files || input.files.length === 0) return;
+      showLoading("画像を圧縮中...");
+      try {
+        const compressedResults = await Promise.all( Array.from(input.files).map(file => compressImage(file)) );
+        showLoading("R2へアップロード中...");
+        
+        let existingImgCount = document.querySelectorAll('#adminImageGallery .admin-image-item').length;
+        let uploadErrors = 0;
+        
+        for (let i = 0; i < compressedResults.length; i++) {
+            const blob = await (await fetch(compressedResults[i])).blob();
+            const fileName = `${currentEditCode}-${existingImgCount + i + 1}.jpg`;
+            const params = { Bucket: BUCKET_NAME, Key: fileName, Body: blob, ContentType: 'image/jpeg' };
+            try { await s3.putObject(params).promise(); } catch (err) { uploadErrors++; }
+        }
+        if (uploadErrors > 0) alert(`${uploadErrors}枚の画像送信に失敗しました。`);
+
+        let base64Images = compressedResults.map(c => ({ mimeType: 'image/jpeg', data: "DUMMY" }));
+        google.script.run
+        .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
+        .withSuccessHandler(function(r){
+          hideLoading(); input.value = "";
+          if(r === "OK") {
+            document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>更新中...</div>';
+            google.script.run.withSuccessHandler(res => renderAdminImages(res.images)).getItemImagesForAdmin(currentAdminSheet, currentEditCode);
+          } else alert(r);
+        }).addAdminImages(currentAdminSheet, currentEditCode, base64Images);
+      } catch(e) { hideLoading(); alert(e.message); }
+    }
+
+    function closeEditModal(){document.getElementById('editCodeModal').style.display='none';}
+    
+    function saveTextEdits(){ 
+      if(!confirm("保存しますか？"))return; 
+      closeEditModal(); showLoading("保存中..."); 
+      let newStatus = document.getElementById('editItemStatus').value;
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
+      .withSuccessHandler(function(r){hideLoading();if(r==="OK")loadAdminList(currentAdminSheet);else alert(r);})
+      .updateItemTextData(currentAdminSheet,currentEditCode,document.getElementById('editTextTitle').value,document.getElementById('editTextDesc').value,document.getElementById('editTextDims').value,newStatus); 
+    }
+
+    function executeRetryAI(){ 
+      if(!confirm("AI再生成しますか？\n※選択中の「商品の状態」を反映して文章を上書きします"))return; 
+      showLoading("状態を反映して再生成中..."); 
+      let newStatus = document.getElementById('editItemStatus').value;
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
+      .withSuccessHandler(function(r){
+        if(r==="OK"){
+          google.script.run
+          .withFailureHandler(function(e){ hideLoading(); alert("再生成エラー: " + e.message); })
+          .withSuccessHandler(function(res){
+            hideLoading();
+            if(!res.error){ alert("再生成が完了しました。\n※最新の内容を画面に反映するには、一度閉じて開き直してください。"); loadAdminList(currentAdminSheet); } else alert(res.error);
+          }).retryAIGeneration(currentAdminSheet,currentEditCode,newStatus);
+        } else { hideLoading(); alert("保存エラー: " + r); }
+      }).updateItemTextData(currentAdminSheet,currentEditCode,document.getElementById('editTextTitle').value,document.getElementById('editTextDesc').value,document.getElementById('editTextDims').value,newStatus); 
+    }
+
+    function submitCodeEdit(){ let o=document.getElementById('editOldCodeInput').value,n=document.getElementById('editNewCodeInput').value.trim().toUpperCase(); if(!n||o===n||!confirm("修正しますか？"))return; closeEditModal(); showLoading("修正中..."); google.script.run.withFailureHandler(function(e){hideLoading();alert(e.message);}).withSuccessHandler(function(r){hideLoading();if(r==="OK")loadAdminList(currentAdminSheet);else alert(r);}).fixManagementCode(currentAdminSheet,o,n); }
+    function deleteItemExecute(){ if(!confirm("削除しますか？"))return; closeEditModal(); showLoading("削除中..."); google.script.run.withFailureHandler(function(e){hideLoading();alert(e.message);}).withSuccessHandler(function(r){hideLoading();if(r==="OK")loadAdminList(currentAdminSheet);else alert(r);}).deleteItemData(currentAdminSheet,currentEditCode); }
+
+    function revertPackExecute() {
+      if(!confirm("梱包ステータスを未梱包に戻し、梱包写真を削除しますか？")) return;
+      closeEditModal(); showLoading("戻し中...");
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
+      .withSuccessHandler(function(r){
+        hideLoading(); if(r === "OK") loadAdminList(currentAdminSheet); else alert(r);
+      }).revertPackingStatus(currentAdminSheet, currentEditCode);
+    }
+
+    function openIncentiveModal() { document.getElementById('incentiveModal').style.display = 'flex'; if (document.getElementById('incentiveList').innerHTML.includes('集計する')) { loadIncentiveData(); } }
+    function closeIncentiveModal() { document.getElementById('incentiveModal').style.display = 'none'; }
+    function toggleCustomDates() { let val = document.getElementById('incentivePeriod').value; document.getElementById('customDateContainer').style.display = (val === 'custom') ? 'flex' : 'none'; }
+
+    function loadIncentiveData() {
+      let period = document.getElementById('incentivePeriod').value; let customStart = document.getElementById('customStartDate').value; let customEnd = document.getElementById('customEndDate').value;
+      if (period === 'custom' && (!customStart || !customEnd)) { alert('開始日と終了日を指定してください'); return; }
+      document.getElementById('incentiveList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;"><span class="mini-spinner"></span>データ取得中...<br><span style="font-size:10px;">(※件数が多いと数十秒かかる場合があります)</span></div>';
+      document.getElementById('totalIncentiveAmount').innerText = '計算中...'; document.getElementById('totalSalesAmount').innerText = '¥0'; document.getElementById('totalSalesCount').innerText = '0';
+      
+      google.script.run
+      .withFailureHandler(function(e){ document.getElementById('incentiveList').innerHTML = '<div style="color:red; padding:20px;">通信エラー: '+e.message+'</div>'; })
+      .withSuccessHandler(function(res) {
+        if (res.error) {
+          document.getElementById('incentiveList').innerHTML = `<div style="color:red; text-align:center; padding:20px;">エラー: ${res.error}</div>`; document.getElementById('totalIncentiveAmount').innerText = '¥0'; return;
+        }
+        let totalIncentive = 0; let totalSales = 0; let html = '';
+        if (!res.data || res.data.length === 0) { html = '<div style="text-align:center; padding:20px; color:#888;">指定期間の売上データはありません</div>'; }
+        else {
+          res.data.forEach(item => {
+            totalIncentive += item.incentive; totalSales += item.price;
+            html += `<div style="display:flex; padding:8px 0; border-bottom:1px solid #f5f5f7; align-items:center;">
+                       <div style="flex:2; font-weight:normal; color:#333;">${item.code}<div style="font-size:9px; color:#888; font-weight:normal;">${item.dateStr}</div></div>
+                       <div style="flex:1; text-align:right; font-family:monospace; font-size:13px;">¥${item.price.toLocaleString()}</div>
+                       <div style="flex:1; text-align:right; font-family:monospace; font-size:13px; font-weight:normal; color:#d32f2f;">¥${item.incentive.toLocaleString()}</div>
+                     </div>`;
+          });
+        }
+        document.getElementById('incentiveList').innerHTML = html;
+        document.getElementById('totalIncentiveAmount').innerText = `¥${totalIncentive.toLocaleString()}`; document.getElementById('totalSalesAmount').innerText = `¥${totalSales.toLocaleString()}`; document.getElementById('totalSalesCount').innerText = res.data ? res.data.length : 0;
+      }).fetchIncentiveData(period, customStart, customEnd);
+    }
+
+    let isBulkAILogicRunning = false;
+
+    async function executeBulkAI() {
+      if(!lastAdminData) return;
+      let targets = [];
+      Object.keys(lastAdminData).forEach(function(k) {
+        let d = lastAdminData[k]; if(!d) return;
+        let needsAI = (!d.title || d.title.trim() === "" || !d.desc || d.desc.trim() === "" || d.desc.includes("※AIエラー発生"));
+        if(needsAI) targets.push(k);
+      });
+      if(targets.length === 0) { alert("生成が必要なアイテムはありません！"); return; }
+      if(!confirm(`${targets.length}件のアイテムの文章を一括生成します。\n開始しますか？`)) return;
+
+      isBulkAILogicRunning = true;
+      document.getElementById('ai-running-banner').style.display = 'flex';
+      for (let i = 0; i < targets.length; i++) {
+        if (!isBulkAILogicRunning) break; 
+        let code = targets[i];
+        document.getElementById('ai-running-banner').innerHTML = `<span class="mini-spinner"></span>一括生成中... (${i+1}/${targets.length}件目) <button onclick="stopBulkAI()" style="background:#d32f2f; color:#fff; border:1px solid #fff; padding:6px 12px; border-radius:15px; font-weight:normal; cursor:pointer; font-size:11px; margin-left:10px;">中止する</button>`;
+        try {
+          await new Promise((resolve) => {
+             google.script.run
+               .withSuccessHandler(res => resolve())
+               .withFailureHandler(err => resolve())
+               .retryAIGeneration(currentAdminSheet, code, null); 
+          });
+        } catch(e) { }
+      }
+      document.getElementById('ai-running-banner').style.display = 'none';
+      if (isBulkAILogicRunning) alert("すべての文章生成を完了しました。"); 
+      isBulkAILogicRunning = false; loadAdminList(currentAdminSheet);
+    }
+
+    function stopBulkAI() {
+      if(!confirm("一括生成を中止しますか？")) return;
+      isBulkAILogicRunning = false; document.getElementById('ai-running-banner').innerHTML = `<span class="mini-spinner"></span>中止処理中...`;
+    }
+
+    async function executeBatchDownload() {
+        if (!currentAdminSheet) return;
+        showLoading("CSVデータの取得準備中...");
+        
+        google.script.run
+        .withFailureHandler(function(e) { hideLoading(); alert("通信エラー: " + e.message); })
+        .withSuccessHandler(async function(res) {
+            showLoading("画像をR2から取得し、ZIPに圧縮しています...\n(※数分かかる場合があります。画面を閉じないでください)");
+            
+            try {
+                const zip = new JSZip();
+                const dateStr = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+                zip.file(`mercari_${currentAdminSheet}_${dateStr}.csv`, res.csvString);
+                
+                const imgFolder = zip.folder("images");
+                const chunkSize = 10;
+                let downloadedCount = 0;
+                
+                for (let i = 0; i < res.images.length; i += chunkSize) {
+                    const chunk = res.images.slice(i, i + chunkSize);
+                    await Promise.all(chunk.map(async (imgName) => {
+                        const url = `${PUBLIC_URL}/${imgName}`;
+                        try {
+                            const response = await fetch(url);
+                            if (response.ok) {
+                                const blob = await response.blob();
+                                imgFolder.file(imgName, blob);
+                            }
+                        } catch (err) {
+                            console.error("Failed to fetch:", imgName, err);
+                        }
+                        downloadedCount++;
+                    }));
+                    document.getElementById('loadingText').innerText = `ZIP圧縮中... (${downloadedCount} / ${res.images.length} 枚)`;
+                }
+                
+                document.getElementById('loadingText').innerText = "ZIPファイルをPCに保存中...";
+                const zipBlob = await zip.generateAsync({ type: "blob" });
+                saveAs(zipBlob, `${currentAdminSheet}_export.zip`);
+                
+                hideLoading();
+            } catch (err) {
+                hideLoading();
+                alert("ZIP生成エラー: " + err.message);
+            }
+        }).getBatchDownloadData(currentAdminSheet);
+    }
+
+    const rawCategories = [
+      "hNG2HERAh5ZhG65ZGDpLgi|ファッション>メンズ>トップス>Tシャツ", "WEMcXPx2ZQYtqU5pxLgg4d|ファッション>メンズ>トップス>ポロシャツ", "ArNgp69uXiiGXmv3gWQNnG|ファッション>メンズ>トップス>タンクトップ・ノースリーブトップス", "HnWGD24k34ewFAKDSzN5mK|ファッション>メンズ>トップス>七分・長袖カットソー", "6uCEmD5pYfN7uDt7e3xs2K|ファッション>メンズ>トップス>シャツ>半袖シャツ>アロハシャツ・かりゆしウェア", "xgxCMpqMCHvDLoFiRie8rc|ファッション>メンズ>トップス>シャツ>半袖シャツ>ドレスシャツ・ビジネスシャツ", "PQqtt5WyUb6we8Q6WyJfuH|ファッション>メンズ>トップス>シャツ>半袖シャツ>ワイシャツ", "9F2DiS2giHwh88HJD3gsk5|ファッション>メンズ>トップス>シャツ>半袖シャツ>ワークシャツ", "vcC9nNTKe4kYCa7okttBGK|ファッション>メンズ>トップス>シャツ>半袖シャツ>その他", "hHZ7bDCGsSGAZ227ciUuJ8|ファッション>メンズ>トップス>シャツ>長袖シャツ>デニムシャツ・ダンガリーシャツ", "dCYcboW4irE5THZLvw2Fqb|ファッション>メンズ>トップス>シャツ>長袖シャツ>ドレスシャツ・ビジネスシャツ", "oVNJKQ8F3fEw2VnSK9iDYH|ファッション>メンズ>トップス>シャツ>長袖シャツ>ネルシャツ", "qLnC54hgb7qfMocSd3igAG|ファッション>メンズ>トップス>シャツ>長袖シャツ>ワイシャツ", "7m7RQcfLKUvXRDiFHfoB7K|ファッション>メンズ>トップス>シャツ>長袖シャツ>その他", "2ZjrejSddE4pgzqyCXVCoV|ファッション>メンズ>トップス>ニット・セーター", "7UsTYoS2vU9qVuXZjySMo6|ファッション>メンズ>トップス>トレーナー・スウェット", "xL5s8xdTt4KUw72R7aYdK7|ファッション>メンズ>トップス>パーカー", "FTFdkbE27x3pk2vShtvbnD|ファッション>メンズ>トップス>カーディガン", "6LFLTCdgsYf5NTpxkrW5TM|ファッション>メンズ>トップス>ベスト", "rQvbXRe4yEuce8TouPR8pC|ファッション>メンズ>トップス>ジャージ", "3aQcahW5CC8LUAgs4joU2h|ファッション>メンズ>トップス>その他", "HaLMJwJoH4XtpFgMEqYjTF|ファッション>メンズ>ジャケット・アウター>テーラードジャケット", "jEhZZf9kqDdhzCdFWHYuPc|ファッション>メンズ>ジャケット・アウター>ノーカラージャケット", "McKkk2VxSaQEo6y7DkQGh4|ファッション>メンズ>ジャケット・アウター>Gジャン・デニムジャケット", "uffEUKwGvfQQeRkjcAgVUB|ファッション>メンズ>ジャケット・アウター>レザージャケット・ライダース>シングルライダース", "SvUDAFGdwYiDpZLgikAUpD|ファッション>メンズ>ジャケット・アウター>レザージャケット・ライダース>ダブルライダース", "YPZq2rMWVVQ3J5NCGZ3pEb|ファッション>メンズ>ジャケット・アウター>レザージャケット・ライダース>その他", "rZJAT2gSrVMnq7v9vKkBEE|ファッション>メンズ>ジャケット・アウター>MA-1・フライトジャケット", "rQSCkWa5EwZs2iV5YquzzW|ファッション>メンズ>ジャケット・アウター>ナイロンジャケット", "N2QrX9RpeowC6G2fLugyYj|ファッション>メンズ>ジャケット・アウター>ジャンパー・ブルゾン", "ECGavS4rSRZaFjeGtsdi6C|ファッション>メンズ>ジャケット・アウター>マウンテンパーカー", "gRZxetquVXWktSjvhrAQnh|ファッション>メンズ>ジャケット・アウター>ミリタリージャケット", "7Jc5brQrWRLXAQJyNpMjTi|ファッション>メンズ>ジャケット・アウター>スカジャン", "7Ut7smnDQTS9g5BTBt4o9f|ファッション>メンズ>ジャケット・アウター>スタジャン", "tG6yt7FGXCJg9SubqKFDBJ|ファッション>メンズ>ジャケット・アウター>カバーオール", "airafdZy2KsZPyxXckEyAB|ファッション>メンズ>ジャケット・アウター>キルティングジャケット", "BjTyZzjkroU5FTorZP5PEm|ファッション>メンズ>ジャケット・アウター>ダウンジャケット", "JGKdWLZ9c2xhYCrbNXvFzc|ファッション>メンズ>ジャケット・アウター>ダウンベスト・キルティングベスト", "ihghvW2ks49MgHGqZeEWqb|ファッション>メンズ>ジャケット・アウター>トレンチコート", "fautVE83TCzxiPUzNowf4b|ファッション>メンズ>ジャケット・アウター>ステンカラーコート", "ujnXm5pqhTSv7ckdR9SWnK|ファッション>メンズ>ジャケット・アウター>チェスターコート", "NcwuewbvLG7BLfrKr5VgCa|ファッション>メンズ>ジャケット・アウター>モッズコート", "9MukDqKi3dVFSqc3qqTCDf|ファッション>メンズ>ジャケット・アウター>ダッフルコート", "dKaasANPjKhUExptnQgw6E|ファッション>メンズ>ジャケット・アウター>ピーコート・ウールコート", "nURUaGQHrdzC52G4NDJKKR|ファッション>メンズ>ジャケット・アウター>フリースジャケット>ボアジャケット", "JHPbAxd8QnMmyWeZbpnjCR|ファッション>メンズ>ジャケット・アウター>その他", "ZEeJB2CDroEoJU4FABRttJ|ファッション>メンズ>パンツ>デニム・ジーンズ>ストレートデニム", "j2TqwkDqRprUK2g57cyiBn|ファッション>メンズ>パンツ>デニム・ジーンズ>スキニーデニム", "DN3vSE3QwZkiqDG5motkq|ファッション>メンズ>パンツ>デニム・ジーンズ>ブーツカットデニム・フレアデニム", "7SWk5vSDbbJJHstL83zhhK|ファッション>メンズ>パンツ>デニム・ジーンズ>その他", "pJzwdAmV6tHa32jdy79wJM|ファッション>メンズ>パンツ>スラックス", "m2yJx2STNjHZYC7RQvpo2H|ファッション>メンズ>パンツ>チノパン", "kTSFyrtWvrEaDLudtr6gmC|ファッション>メンズ>パンツ>スキニーパンツ", "pkssdcuqGtxjarKzMHtKB5|ファッション>メンズ>パンツ>ワイドパンツ・イージーパンツ", "nVzEHmeq7374Mt2eYqzsU7|ファッション>メンズ>パンツ>ワークパンツ・カーゴパンツ>ペインターパンツ", "oaUaEYhtfjM35UnrjYoyjb|ファッション>メンズ>パンツ>ジョガーパンツ・スウェットパンツ", "bCv8av8oBHb3Yg8M3Y2apF|ファッション>メンズ>パンツ>ショートパンツ・ハーフパンツ", "fY7ooMWFNfucdHAbBfNDC8|ファッション>メンズ>パンツ>サルエルパンツ", "67QSGVR9NGQPCPZsAFb2o3|ファッション>メンズ>パンツ>オーバーオール・つなぎ", "VzoyDjYf6oSPVLqf9hKAiF|ファッション>メンズ>パンツ>その他", "nX7Uc58icjzekhkzt6KcNJ|ファッション>メンズ>スーツ>ビジネススーツ", "h4TsNpZhCF36eUs3Vtdmhg|ファッション>メンズ>スーツ>ビジネスジャケット", "sz4mHZmLyeCzU6XjzjTEoQ|ファッション>メンズ>スーツ>スラックス", "sLsE8barkJMsj5msjViRjg|ファッション>メンズ>スーツ>カジュアルスーツ", "kk86shqwPSf4NCnSfCUkwn|ファッション>メンズ>スーツ>スーツベスト", "XMiwTG599snqGWPP8n44zd|ファッション>メンズ>スーツ>フォーマルシャツ", "ygpnQnTac2DpRr9FciCaYh|ファッション>メンズ>スーツ>フォーマルベスト", "LNCeQabKMCGgfxRwc5DxsD|ファッション>メンズ>スーツ>ブラックフォーマル", "BttvtedEME5J9xp3zinHwZ|ファッション>メンズ>スーツ>タキシード", "Em9ctmUiFGxAjPbVayxQF3|ファッション>メンズ>スーツ>モーニング・フロックコート", "tjR3x9ucqBpuXTd7WqjKuG|ファッション>メンズ>スーツ>燕尾服", "g56dkSQLsX3FYr5y5j9YsW|ファッション>メンズ>スーツ>その他", "hqE9TkEhsY6PB5BMBcTrza|ファッション>レディース>トップス>Tシャツ・カットソー>半袖(Tシャツ)", "rVoDQSXo7amDBgd6gtSB6B|ファッション>レディース>トップス>Tシャツ・カットソー>五分袖・七分袖", "FogBtEZPucsQywc7siacyV|ファッション>レディース>トップス>Tシャツ・カットソー>長袖", "jAvAc9YvDnaT9Q29cRg5tU|ファッション>レディース>トップス>Tシャツ・カットソー>ノースリーブ", "2J7JPw64WvMkL7t3mJnGuc|ファッション>レディース>トップス>ポロシャツ>半袖", "rZjzomDfSbje5rtSXUA27N|ファッション>レディース>トップス>ポロシャツ>五分袖・七分袖", "s2LxzvNgQYNpS5LpBVE53j|ファッション>レディース>トップス>ポロシャツ>長袖", "To4NYVJut9hXmywVYput8W|ファッション>レディース>トップス>ポロシャツ>ノースリーブ", "HdJJEC5h4yxHDszBGCSfMQ|ファッション>レディース>トップス>シャツ・ブラウス>半袖", "XG9bjRtG4CDgco2ZRtdPdY|ファッション>レディース>トップス>シャツ・ブラウス>五分袖・七分袖", "bnNoE4mRonxaDGbH6pvKzM|ファッション>レディース>トップス>シャツ・ブラウス>長袖", "EAxN2vKM7LW937UUdRZviC|ファッション>レディース>トップス>シャツ・ブラウス>ノースリーブ", "vuW3UrsQBMq8ZKXuqtrerG|ファッション>レディース>トップス>ニット・セーター>半袖", "PPDnERvzRcWxcmiJnNJg73|ファッション>レディース>トップス>ニット・セーター>五分袖・七分袖", "5LRMAAGnZUjPHBUPNQppe9|ファッション>レディース>トップス>ニット・セーター>長袖", "u9hkqXnTAYd3dvUatJPYxd|ファッション>レディース>トップス>ニット・セーター>ノースリーブ", "9dWkaZBQBfqdw3F29xz499|ファッション>レディース>トップス>トレーナー・スウェット", "6TjwiNRyiuge7M76A7bdxh|ファッション>レディース>トップス>パーカー", "Xd9y3bobWfgzGucwYCkD5i|ファッション>レディース>トップス>カーディガン・ボレロ・アンサンブル>半袖", "kYHmn8GSnx8Smb3TiGMMCF|ファッション>レディース>トップス>カーディガン・ボレロ・アンサンブル>五分袖・七分袖", "XkyXd8W9ckz8WLLDqccWsB|ファッション>レディース>トップス>カーディガン・ボレロ・アンサンブル>長袖", "RpSfCaj2GRpbRLuHyyjyE8|ファッション>レディース>トップス>チュニック>半袖", "VPfoqbXSF3hABxjNkkqmgS|ファッション>レディース>トップス>チュニック>五分袖・七分袖", "Zcp36YwgP9ob5AoKqVJqHc|ファッション>レディース>トップス>チュニック>長袖", "q74uR5TvL3B5tpvQkwXbBE|ファッション>レディース>トップス>チュニック>ノースリーブ", "EupHe5dVoLFCRXvt9x5vNM|ファッション>レディース>トップス>ベスト・ジレ・ビスチェ>ニットベスト", "9eHTbhfhwfSgeRF6uE5kif|ファッション>レディース>トップス>ベスト・ジレ・ビスチェ>ベスト・ジレ", "isVBtqMQbjHmDAETXmUpvT|ファッション>レディース>トップス>ベスト・ジレ・ビスチェ>ビスチェ", "5D4vmmC7R9ztYVmAFtPdQH|ファッション>レディース>トップス>タンクトップ", "XsSyRWUQA9CdFRQcMRSesF|ファッション>レディース>トップス>キャミソール", "RTXGKnQEgvGCU6axTyqesZ|ファッション>レディース>トップス>ベアトップ・チューブトップ", "eqgdhANyyZsDCtHqZ8PPwC|ファッション>レディース>トップス>ジャージ", "JGHhfXa9tmZDGHXxtQ6Rf|ファッション>レディース>トップス>その他", "XT7qsLhbYHSTihCordKxTV|ファッション>レディース>ジャケット・アウター>テーラードジャケット", "9CQ8E8SWWWMkbeh4bXsaAj|ファッション>レディース>ジャケット・アウター>ノーカラージャケット", "e8K2zh2JDxS2NYfzusDLe3|ファッション>レディース>ジャケット・アウター>Gジャン・デニムジャケット・カバーオール", "c4QifeiGdxWzSNwU3VuL5M|ファッション>レディース>ジャケット>アウター>レザージャケット・ライダース>シングルライダース", "LgV86VjqQzG9A2vtZT5fVo|ファッション>レディース>ジャケット・アウター>レザージャケット・ライダース>ダブルライダース", "f6LpptNHmG8mdCtezNp843|ファッション>レディース>ジャケット・アウター>レザージャケット・ライダース>その他", "uYL2SkgGQNX922bpyFjizm|ファッション>レディース>ジャケット・アウター>MA-1", "Yp5ejhogkyRUc5FnSSbuRN|ファッション>レディース>ジャケット・アウター>ジャンパー・ブルゾン", "YM9JNc5cUUVJkChK8kurWH|ファッション>レディース>ジャケット・アウター>マウンテンパーカー", "QtVhmU7piMpCiPSNYKoPKH|ファッション>レディース>ジャケット・アウター>ミリタリージャケット", "dzeXjPtpsCxxv7CKFQfVUd|ファッション>レディース>ジャケット・アウター>スカジャン", "Q8gXXvcy3jVVXzNX562kUF|ファッション>レディース>ジャケット・アウター>スタジャン", "c9WsaC5sPnYvxkMa4WymGf|ファッション>レディース>ジャケット・アウター>キルティングジャケット", "DBAy9txMgbnNK39rXwpx7E|ファッション>レディース>ジャケット・アウター>ダウンジャケット", "QdTCwYZ7vEYNCU5JXGKzyX|ファッション>レディース>ジャケット・アウター>ダウンベスト・キルティングベスト", "GkyBZA2avtyYSE2Ztvr2UX|ファッション>レディース>ジャケット・アウター>トレンチコート・スプリングコート", "8ceyxPPqCbJuQzHVQgRvTX|ファッション>レディース>ジャケット・アウター>ピーコート・ウールコート", "6JjLDxScQuaugh6RD8S8MF|ファッション>レディース>ジャケット・アウター>チェスターコート", "kcEoWs8UAiQ9TvAYmugaTm|ファッション>レディース>ジャケット・アウター>モッズコート", "p3CfSrPQJTAvGrGgBwn2YT|ファッション>レディース>ジャケット・アウター>ダッフルコート", "gvZjsVfxSzcChLYrMvojMH|ファッション>レディース>ジャケット・アウター>ロングコート", "BssqCm2VD9Z9jcqZ8pyuL5|ファッション>レディース>ジャケット・アウター>ムートンコート", "LAZn7DJQbkYP5Sdmbe8onJ|ファッション>レディース>ジャケット>ボアジャケット", "PoHutBFYFiNhcZXAVem9H6|ファッション>レディース>ジャケット・アウター>毛皮・ファーコート", "FBW7iirFZvRdVDtPyUn8VC|ファッション>レディース>ジャケット・アウター>ポンチョ・ケープコート", "P4FC5p6YRE9vJWi5hf3wV9|ファッション>レディース>ジャケット・アウター>その他", "kQEULcJEomA6rdPBFRzqUM|ファッション>レディース>パンツ>デニム・ジーンズ>ストレートデニム", "xZEXvYUTSzMah8NtpfP5dX|ファッション>レディース>パンツ>デニム・ジーンズ>スキニーデニム", "ihLQCePFfxSNSeNq3cbFcA|ファッション>レディース>パンツ>デニム・ジーンズ>ブーツカットデニム・フレアデニム", "6ThQzkPZadNuXavXZR7qjL|ファッション>レディース>パンツ>デニム・ジーンズ>その他", "pvEukMpP42ef6KhPgDjVSU|ファッション>レディース>パンツ>カジュアルパンツ", "2QRyHBiCbvCxx5f3JobhqY|ファッション>レディース>パンツ>スラックス", "Nen83N7LHtpCWgwuqSLFcL|ファッション>レディース>パンツ>チノパン", "7zV63vqgdF2zqwgVFsDFMC|ファッション>レディース>パンツ>スキニーパンツ", "AhZVVJZgsDSyehEudc7qBC|ファッション>レディース>パンツ>ワイドパンツ・イージーパンツ", "kiwVA25Vwvge3AL4k9oRs4|ファッション>レディース>パンツ>ワークパンツ・カーゴパンツ", "zJk69WcpddXQmhLNHUjzuh|ファッション>レディース>パンツ>ジョガーパンツ・スウェットパンツ", "jQx7B5umjYonCpQ3qRi3j|ファッション>レディース>パンツ>ショートパンツ・ハーフパンツ", "dm63cw2caTCqde6AQsPC57|ファッション>レディース>パンツ>キュロット", "YcVafCjz8RzQ2EfeENz7xf|ファッション>レディース>パンツ>ガウチョパンツ", "GPyBhq7KUfKsjUWbYXrEUV|ファッション>レディース>パンツ>サルエルパンツ", "GWbVygDD5tge9dYbbKtmG6|ファッション>レディース>パンツ>その他", "FmTAtitKfsCnq9wineJdpm|ファッション>レディース>スカート>ひざ丈スカート", "RC45KMdBhPysM4WQLUoYfA|ファッション>レディース>スカート>ミニスカート", "PTZ6VDVsG8SoXx9eu8re2S|ファッション>レディース>スカート>ロングスカート", "yHgN82xDgNJjvUUomqSbof|ファッション>レディース>スカート>その他", "GVNNhJkByzzvoHKejXCTNn|ファッション>レディース>ワンピース>ひざ丈ワンピース", "GVNNhJkByzzvoHKejXCTNn|ファッション>レディース>ワンピース>ミニワンピース", "GVNNhJkByzzvoHKejXCTNn|ファッション>レディース>ワンピース>ロングワンピース", "GVNNhJkByzzvoHKejXCTNn|ファッション>レディース>ワンピース>その他", "SgpmcQKN4HhGMyxAnSoAo8|ファッション>レディース>サロペット・オーバーオール・オールインワン", "4TsJyFAh8mrYjCiRxSvuK|ファッション>レディース>スーツ・フォーマル・ドレス>スーツ・フォーマル", "ftnitJFUhL7w3VJwLcVbfJ|ファッション>レディース>スーツ・フォーマル・ドレス>ドレス・ブライダル", "YcKBxJtUEpzG4wRWt9kJSQ|ファッション>レディース>スーツ・フォーマル・ドレス>その他", "9eyQAR2BCNeAJRqRjqUWLi|ファッション>レディース>セットアップ"
+    ];
+    const categoryTree={}; 
+    function buildTree(){ rawCategories.forEach(function(line){ let p=line.split('|'), id=p[0], fullPath=p[1], pathParts=fullPath.split(/>/).map(function(s){return s.trim()}).slice(1); let cur=categoryTree; for(let i=0;i<pathParts.length;i++){ let pt=pathParts[i]; if(i===pathParts.length-1) cur[pt]=id; else{ if(typeof cur[pt]!=='object')cur[pt]={}; cur=cur[pt]; } } }); }
+    buildTree(); const dropdownContainer=document.getElementById('category-dropdowns');
+    function renderDropdowns(obj, level, pathArray) { Array.from(dropdownContainer.querySelectorAll('select')).forEach(function(sel, idx) { if(idx>=level)sel.remove(); }); document.getElementById('finalCategoryId').value=""; document.getElementById('finalCategoryText').value=""; if(typeof obj==='string'){ document.getElementById('finalCategoryId').value=obj; document.getElementById('finalCategoryText').value=pathArray.join(' > '); return; } if(!obj||!Object.keys(obj).length)return; const sel=document.createElement('select'); sel.innerHTML=`<option value="" disabled selected>${level+1}階層目を選択</option>`; Object.keys(obj).forEach(function(k){ const opt=document.createElement('option'); opt.value=k; opt.textContent=k; sel.appendChild(opt); }); sel.addEventListener('change', function(e){ const v=e.target.value; const n=[...pathArray, v]; if(v)e.target.classList.add('is-filled'); else e.target.classList.remove('is-filled'); renderDropdowns(obj[v], level+1, n); saveDraftData(); }); dropdownContainer.appendChild(sel); }
+    function restoreCategoryTree(pArr){ let cur=categoryTree, cPath=[]; dropdownContainer.innerHTML=''; for(let i=0;i<pArr.length;i++){ renderDropdowns(cur,i,cPath); const sel=dropdownContainer.children[i]; if(sel){ if(Array.from(sel.options).some(function(o){return o.value===pArr[i]})){ sel.value=pArr[i]; sel.classList.add('is-filled'); cur=cur[pArr[i]]; cPath.push(pArr[i]); }else break; } } if(typeof cur==='string'){ document.getElementById('finalCategoryId').value=cur; document.getElementById('finalCategoryText').value=cPath.join(' > '); }else renderDropdowns(cur,pArr.length,cPath); }
+    
+    let BRAND_LIST=[]; document.addEventListener('DOMContentLoaded',function(){ renderDropdowns(categoryTree,0,[]); restoreDraftData(); google.script.run.withFailureHandler(function(e){ document.getElementById('brandLoadStatus').innerText="(取得失敗)"; }).withSuccessHandler(function(b){ BRAND_LIST=b; document.getElementById('brandLoadStatus').innerText="(準備完了)"; }).getBrandList(); });
+    const bInput=document.getElementById("brand"), bIdInput=document.getElementById("brandId"), aList=document.getElementById("brand-autocomplete-list");
+    bInput.addEventListener("input", function(){ let v=this.value; aList.innerHTML=""; bIdInput.value=""; if(!v)return; let c=0, u=v.toUpperCase(); for(let i=0;i<BRAND_LIST.length;i++){ let bId=BRAND_LIST[i][0], bN=BRAND_LIST[i][1], bK=BRAND_LIST[i][2]||"", bE=BRAND_LIST[i][3]||""; if(bN.toUpperCase().includes(u)||bK.toUpperCase().includes(u)||bE.toUpperCase().includes(u)){ let d=document.createElement("div"); d.innerHTML=bN.replace(new RegExp(`(${v})`,"gi"),`<span style="font-weight:normal;">$1</span>`); d.addEventListener("click",function(){ bInput.value=bN; bIdInput.value=bId; bInput.classList.add('is-filled'); aList.innerHTML=""; saveDraftData(); }); aList.appendChild(d); c++; if(c>=30)break; } } });
+    document.addEventListener("click", function(e){ if(e.target!==bInput)aList.innerHTML=""; });
+
+    document.addEventListener('touchmove', function(e){ if(e.touches.length > 1) { e.preventDefault(); } }, { passive: false });
+    let lastTouchTime = 0; document.addEventListener('touchend', function (e) { let now = performance.now(); if (now - lastTouchTime <= 300) { e.preventDefault(); } lastTouchTime = now; }, { passive: false });
+  </script>
 </body>
 </html>
