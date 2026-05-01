@@ -7,6 +7,7 @@ import io
 import requests
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from supabase import create_client, Client
 
 # --- 環境設定 ---
