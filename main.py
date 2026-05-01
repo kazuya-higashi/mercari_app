@@ -7,7 +7,7 @@ import io
 import requests
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse  # ★画面を表示するための機能
 from supabase import create_client, Client
 
 # --- 環境設定 ---
@@ -26,6 +26,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ★スマホでアクセスしたときに index.html を表示する設定
+@app.get("/")
+def read_root():
+    return FileResponse("index.html")
 
 # --- AI・タイトル生成ロジック（GAS完全再現） ---
 def analyze_image_with_gemini(base64_img: str, keywords: str):
