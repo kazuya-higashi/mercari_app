@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="出品システムV2">
+  <meta name="apple-mobile-web-app-title" content="出品システム">
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -615,26 +615,30 @@
       document.getElementById('imagePreviewModal').style.display = 'flex';
     }
 
-　　　document.addEventListener('DOMContentLoaded', function() { 
+    // ★★★ キャッシュ対策＆記憶の復元 ★★★
+    document.addEventListener('DOMContentLoaded', function() { 
       let g = localStorage.getItem('dailyMeasureGoal'); 
       if(g) { let dailyGoalInput = document.getElementById('dailyGoalInput'); if(dailyGoalInput) dailyGoalInput.value = g; }
       
-      // ★ブラウザの記憶（localStorage）から最優先で「今のバッチ」を呼び出す！
       let savedBatch = localStorage.getItem('activeBatchSheet');
+      // もし古い不要な記憶（DB）があったら消す
+      if (savedBatch === "DB") {
+          savedBatch = null;
+          localStorage.removeItem('activeBatchSheet');
+      }
+
       if (savedBatch) {
           activeBatchSheet = savedBatch;
-          console.log("復元したバッチ:", activeBatchSheet);
       }
       
       google.script.run
       .withFailureHandler(function(e){ console.error(e); })
       .withSuccessHandler(function(res) {
-        // もし記憶が無ければ、サーバーから最新のバッチを取得して記憶させる
         if(res && res.config && !savedBatch) {
           activeBatchSheet = res.config.sheetName;
           localStorage.setItem('activeBatchSheet', activeBatchSheet);
         }
-      }).getAdminData(activeBatchSheet); // 取得時も記憶しているバッチを基準にする
+      }).getAdminData(activeBatchSheet);
     });
     
     function saveDailyGoal(){ let v=document.getElementById('dailyGoalInput').value; if(!v||v<=0){alert("正しい目標件数を入力してください");return;} localStorage.setItem('dailyMeasureGoal',v); alert(`目標を${v}件に設定しました`); }
