@@ -7,7 +7,7 @@ import io
 import requests
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse  # ★画面を表示するための機能
+from fastapi.responses import FileResponse
 from supabase import create_client, Client
 
 # --- 環境設定 ---
@@ -27,7 +27,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ★スマホでアクセスしたときに index.html を表示する設定
 @app.get("/")
 def read_root():
     return FileResponse("index.html")
@@ -101,19 +100,35 @@ async def rpc_endpoint(req: Request):
     args = payload.get("args", [])
     
     try:
+        # 0. バッチ作成（次の納品分を設定）★完全対応
+        if method == "saveBatchSettings":
+            d = args[0]
+            batch_name = d.get("sheetName")
+            # Supabaseにバッチ名の目印（ダミーデータ）を保存して記憶させる
+            res = supabase.table("mercari_items").select("*").eq("item_code", f"BATCH-{batch_name}").execute()
+            if not res.data:
+                supabase.table("mercari_items").insert({
+                    "item_code": f"BATCH-{batch_name}", 
+                    "batch_name": batch_name, 
+                    "title": "BATCH_DUMMY",
+                    "status_text": "", "size_input": "", "category_text": ""
+                }).execute()
+            return {"data": "OK"}
+
         # 1. 新規出品用の仮番号発行
-        if method == "reserveNewCode":
+        elif method == "reserveNewCode":
             code = f"TMP-{int(time.time())}"
             return {"data": {"code": code, "displayCount": "新規", "error": None}}
             
-        # 2. ブランド一覧（Supabaseにマスタが無ければ空リストを返す）
+        # 2. ブランド一覧
         elif method == "getBrandList":
             return {"data": []}
             
-        # 3. 新規出品のAI生成と保存
+        # 3. 新規出品のAI生成と保存 ★バッチ名対応
         elif method == "processHeavyData":
             code = args[0]
             d = args[1]
+            batch_name = args[2] if len(args) > 2 else "デフォルトバッチ"
             b64 = d["images"][0]["data"] if d.get("images") and d["images"][0]["data"] != "DUMMY" else ""
             
             ai_data = {}
@@ -123,10 +138,10 @@ async def rpc_endpoint(req: Request):
             title = build_title(d, ai_data, gender, code)
             desc = build_description(ai_data.get("intro", ""), d.get("statusText", ""), d.get("sizeInput", ""))
             
-            # 画像ファイル名の構築（最大20枚）
             images = [f"{code}-{i+1}.jpg" for i in range(20) if i < len(d.get("images", []))]
             
             supabase.table("mercari_items").insert({
+                "batch_name": batch_name,
                 "item_code": code, "brand": d.get("brand", ""), "keywords": d.get("keywords", ""),
                 "material": d.get("materialText", ""), "status_text": d.get("statusText", ""),
                 "size_input": d.get("sizeInput", ""), "category_text": d.get("categoryText", ""),
@@ -136,11 +151,16 @@ async def rpc_endpoint(req: Request):
             
             return {"data": {"code": code, "error": None}}
 
-        # 4. 未採寸リストの取得
+        # 4. 未採寸リストの取得 ★バッチ名で絞り込み
         elif method == "getPendingMeasurements":
-            res = supabase.table("mercari_items").select("*").execute()
+            batch_name = args[0] if args else ""
+            query = supabase.table("mercari_items").select("*")
+            if batch_name: query = query.eq("batch_name", batch_name)
+            res = query.execute()
+            
             items = []
             for r in res.data:
+                if r.get("item_code", "").startswith("BATCH-"): continue
                 if r.get("item_code", "").startswith("TMP-") or "【寸法データ未入力" in r.get("description", ""):
                     img = r.get("images", [])
                     thumb = img[0] if img else ""
@@ -151,7 +171,7 @@ async def rpc_endpoint(req: Request):
                     })
             return {"data": items}
             
-        # 5. 採寸データの保存（ラグラン・パンツ対応）
+        # 5. 採寸データの保存
         elif method == "saveMeasurement":
             code = args[0]
             dims = args[1]
@@ -181,12 +201,16 @@ async def rpc_endpoint(req: Request):
             supabase.table("mercari_items").update({"description": new_desc}).eq("item_code", code).execute()
             return {"data": "OK"}
             
-        # 6. 未梱包リストの取得
+        # 6. 未梱包リストの取得 ★バッチ名で絞り込み
         elif method == "getPendingPackings":
-            res = supabase.table("mercari_items").select("*").neq("pack_status", "梱包完了").execute()
+            batch_name = args[0] if args else ""
+            query = supabase.table("mercari_items").select("*").neq("pack_status", "梱包完了")
+            if batch_name: query = query.eq("batch_name", batch_name)
+            res = query.execute()
+            
             items = []
             for r in res.data:
-                # 採寸済み（寸法データ未入力が消えている）ものをリストアップ
+                if r.get("item_code", "").startswith("BATCH-"): continue
                 if not r.get("item_code", "").startswith("TMP-") and "【寸法データ未入力" not in r.get("description", ""):
                     img = r.get("images", [])
                     thumb = img[0] if img else ""
@@ -226,14 +250,28 @@ async def rpc_endpoint(req: Request):
             
             return {"data": {"status": "OK", "finalCode": final_code, "isNewlyAssigned": is_new}}
 
-        # 8. ダッシュボード管理データの取得
+        # 8. ダッシュボード管理データの取得 ★完全対応（タブ切り替え対応）
         elif method == "getAdminData":
-            res = supabase.table("mercari_items").select("*").order("created_at").execute()
+            req_batch = args[0] if args and args[0] else ""
+            
+            # すべてのバッチ名をSupabaseから取得
+            res_all = supabase.table("mercari_items").select("batch_name").execute()
+            all_batches = sorted(list(set([r["batch_name"] for r in res_all.data if r.get("batch_name")])))
+            if not all_batches:
+                all_batches = ["デフォルトバッチ"]
+                
+            # 開くべきバッチ（タブ）を決定
+            active_batch = req_batch if req_batch in all_batches else all_batches[-1]
+            
+            # 選択されたバッチのデータのみを取得
+            res = supabase.table("mercari_items").select("*").eq("batch_name", active_batch).order("created_at").execute()
+            
             item_map = {}
             for r in res.data:
                 c = r["item_code"]
+                if c.startswith("BATCH-"): continue  # バッチ管理用の目印データは画面に出さない
                 img = r.get("images", [])
-                thumb = img[0] if img else ""
+                thumb = img[0] if img and isinstance(img, list) else ""
                 item_map[c] = {
                     "count": 1, "row": 0, "status": "出品完了", "dims": "測定済" if "【実寸" in r.get("description", "") else "",
                     "brand": r.get("brand", ""), "statusText": r.get("status_text", ""),
@@ -242,11 +280,14 @@ async def rpc_endpoint(req: Request):
                     "packStatus": r.get("pack_status", ""), "shipStatus": "",
                     "missingImages": [], "hasMissingImage": False
                 }
-            return {"data": {"config": {"sheetName": "DB"}, "itemMap": item_map, "allSheets": ["DB"], "currentViewSheet": "DB"}}
+            return {"data": {"config": {"sheetName": active_batch}, "itemMap": item_map, "allSheets": all_batches, "currentViewSheet": active_batch}}
 
-        # 9. CSV＆ZIP一括ダウンロード用データの構築
+        # 9. CSV＆ZIP一括ダウンロード用データの構築 ★バッチ名で絞り込み
         elif method == "getBatchDownloadData":
-            res = supabase.table("mercari_items").select("*").execute()
+            batch_name = args[0] if args else ""
+            query = supabase.table("mercari_items").select("*")
+            if batch_name: query = query.eq("batch_name", batch_name)
+            res = query.execute()
             
             output = io.StringIO()
             writer = csv.writer(output, quoting=csv.QUOTE_ALL)
@@ -254,7 +295,7 @@ async def rpc_endpoint(req: Request):
             
             images_to_download = []
             for r in res.data:
-                if r.get("item_code", "").startswith("TMP-"): continue
+                if r.get("item_code", "").startswith("TMP-") or r.get("item_code", "").startswith("BATCH-"): continue
                 
                 imgs = r.get("images", [])
                 row_imgs = [imgs[i] if i < len(imgs) else "" for i in range(20)]
@@ -283,8 +324,17 @@ async def rpc_endpoint(req: Request):
                     images.append({"name": img, "url": f"{PUBLIC_URL}/{img}"})
             return {"data": {"images": images}}
 
-        # 11. データの強制修正など（簡易対応）
-        elif method in ["updateItemTextData", "deleteItemData"]:
+        # 11. データの強制修正など
+        elif method == "updateItemTextData":
+            code = args[1]
+            supabase.table("mercari_items").update({
+                "title": args[2], "description": args[3], "status_text": args[5]
+            }).eq("item_code", code).execute()
+            return {"data": "OK"}
+            
+        elif method == "deleteItemData":
+            code = args[1]
+            supabase.table("mercari_items").delete().eq("item_code", code).execute()
             return {"data": "OK"}
             
         else:
