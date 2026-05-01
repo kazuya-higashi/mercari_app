@@ -51,7 +51,8 @@ def analyze_image_with_gemini(base64_img: str, keywords: str):
         res = requests.post(url, json=payload)
         res.raise_for_status()
         text = res.json()["candidates"][0]["content"]["parts"][0]["text"]
-        return json.loads(text.replace("```json", "").replace("```", "").strip())
+        return json.loads(text.replace("
+```json", "").replace("```", "").strip())
     except Exception as e:
         return {"intro": f"※AIエラー発生: {str(e)}"}
 
@@ -100,11 +101,26 @@ async def rpc_endpoint(req: Request):
     args = payload.get("args", [])
     
     try:
-        # 0. バッチ作成（次の納品分を設定）★完全対応
-        if method == "saveBatchSettings":
+        # 0.5 空き枠の確認 ★今回追加分
+        if method == "checkBatchFull":
+            batch_name = args[0] if args else ""
+            if not batch_name: return {"data": False}
+            
+            res = supabase.table("mercari_items").select("item_code", count="exact").eq("batch_name", batch_name).execute()
+            current_count = res.count
+            
+            m = re.match(r'^([A-Za-z]+)(\d+)([A-Za-z]+)〜([A-Za-z]+)(\d+)([A-Za-z]+)$', batch_name)
+            if m:
+                start = int(m.group(2))
+                end = int(m.group(5))
+                max_items = end - start + 1
+                return {"data": current_count >= max_items}
+            return {"data": False}
+
+        # 0. バッチ作成（次の納品分を設定）
+        elif method == "saveBatchSettings":
             d = args[0]
             batch_name = d.get("sheetName")
-            # Supabaseにバッチ名の目印（ダミーデータ）を保存して記憶させる
             res = supabase.table("mercari_items").select("*").eq("item_code", f"BATCH-{batch_name}").execute()
             if not res.data:
                 supabase.table("mercari_items").insert({
@@ -232,7 +248,6 @@ async def rpc_endpoint(req: Request):
             is_new = False
             
             if code.startswith("TMP-"):
-                # Supabaseから現在のOM番号の最大値を探して+1する
                 all_om = supabase.table("mercari_items").select("item_code").like("item_code", "OM%HG").execute()
                 nums = [int(re.search(r'\d+', c["item_code"]).group()) for c in all_om.data if re.search(r'\d+', c["item_code"])]
                 next_num = max(nums) + 1 if nums else 10000
@@ -250,26 +265,23 @@ async def rpc_endpoint(req: Request):
             
             return {"data": {"status": "OK", "finalCode": final_code, "isNewlyAssigned": is_new}}
 
-        # 8. ダッシュボード管理データの取得 ★完全対応（タブ切り替え対応）
+        # 8. ダッシュボード管理データの取得
         elif method == "getAdminData":
             req_batch = args[0] if args and args[0] else ""
             
-            # すべてのバッチ名をSupabaseから取得
             res_all = supabase.table("mercari_items").select("batch_name").execute()
             all_batches = sorted(list(set([r["batch_name"] for r in res_all.data if r.get("batch_name")])))
             if not all_batches:
                 all_batches = ["デフォルトバッチ"]
                 
-            # 開くべきバッチ（タブ）を決定
             active_batch = req_batch if req_batch in all_batches else all_batches[-1]
             
-            # 選択されたバッチのデータのみを取得
             res = supabase.table("mercari_items").select("*").eq("batch_name", active_batch).order("created_at").execute()
             
             item_map = {}
             for r in res.data:
                 c = r["item_code"]
-                if c.startswith("BATCH-"): continue  # バッチ管理用の目印データは画面に出さない
+                if c.startswith("BATCH-"): continue
                 img = r.get("images", [])
                 thumb = img[0] if img and isinstance(img, list) else ""
                 item_map[c] = {
