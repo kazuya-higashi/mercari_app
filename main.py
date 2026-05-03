@@ -18,6 +18,10 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 PUBLIC_URL = "https://pub-8e4386156d26427f861486afe0381fb4.r2.dev"
 
+# ★追加：GASからブランドマスタを引っ張ってくるための設定
+SPREADSHEET_ID = '1kpKObKqse7sfcG_VByhF1uWeMRTdFYPAu4VS0eqh6PU'
+GAS_API_URL = "https://script.google.com/macros/s/AKfycbwX3CsxVEfZ1OUa5ytPkBmsElpihy6hKrm_vzW_KOlyX25Xim6jLNmW3fEflUF16B37/exec" # ※ご自身でデプロイしたURLに書き換えてください
+
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL else None
 app = FastAPI()
 
@@ -34,7 +38,7 @@ def read_root():
     return FileResponse("index.html")
 
 # ==========================================
-# 共通機能・設定管理（GASの PropertiesService の完全再現）
+# 共通機能・設定管理
 # ==========================================
 def normalize_str(s):
     return unicodedata.normalize('NFKC', str(s)).strip() if s else ""
@@ -171,13 +175,13 @@ async def rpc_endpoint(req: Request):
     args = payload.get("args", [])
     
     try:
-        # 1. バッチ作成（次の納品分を設定）
+        # 1. バッチ作成
         if method == "saveBatchSettings":
             d = args[0]
             save_batch_settings(d)
             return {"data": "OK"}
 
-        # 2. 空き枠の確認（GASの正規表現と上限計算を完全再現）
+        # 2. 空き枠の確認
         elif method == "checkBatchFull":
             targetSheetName = args[0] if args and args[0] else None
             config = get_batch_settings()
@@ -186,7 +190,6 @@ async def rpc_endpoint(req: Request):
             start = int(config.get("start", 10000))
             end = int(config.get("end", 19999))
             
-            # いただいたGAS通り、正規表現で文字を判定（全角チルダやハイフンにも耐えるよう強化）
             norm_sheet = normalize_str(sheetName)
             m = re.match(r'^([A-Za-z]+)(\d+)([A-Za-z]+)[〜～\-]+([A-Za-z]+)(\d+)([A-Za-z]+)$', norm_sheet)
             if m:
@@ -232,9 +235,16 @@ async def rpc_endpoint(req: Request):
             count = currentItems + 2
             return {"data": {"code": tempCode, "displayCount": count, "error": None}}
             
-        # 4. ブランド一覧
+        # 4. ブランド一覧（GASから直接取得するように変更済）
         elif method == "getBrandList":
-            return {"data": []}
+            try:
+                response = requests.get(f"{GAS_API_URL}?method=getBrandList")
+                response.raise_for_status()
+                brand_data = response.json()
+                return {"data": brand_data.get("data", [])}
+            except Exception as e:
+                print(f"Brand list fetch error: {e}")
+                return {"data": []}
             
         # 5. 新規出品のAI生成と保存
         elif method == "processHeavyData":
@@ -371,7 +381,7 @@ async def rpc_endpoint(req: Request):
             
             return {"data": {"status": "OK", "finalCode": final_code, "isNewlyAssigned": is_new}}
 
-        # 10. ダッシュボード管理データの取得（GAS完全互換、勝手にバッチが変わらないように）
+        # 10. ダッシュボード管理データの取得
         elif method == "getAdminData":
             targetSheetName = args[0] if args and args[0] else None
             config = get_batch_settings()
@@ -403,7 +413,6 @@ async def rpc_endpoint(req: Request):
                 thumbName = img[0] if img and isinstance(img, list) and len(img) > 0 else ""
                 desc = str(r.get("description", ""))
                 
-                # GAS時代と同様、実寸が入っているか未入力文字がないかで採寸済を判定
                 dims_status = "測定済" if "【実寸" in desc or "【寸法データ未入力" not in desc else ""
                 
                 itemMap[code] = {
@@ -468,7 +477,7 @@ async def rpc_endpoint(req: Request):
                     if img: images.append({"name": str(img), "url": f"{PUBLIC_URL}/{img}"})
             return {"data": {"images": images}}
 
-        # 13. 管理画面からの画像削除（バグ修正済）
+        # 13. 管理画面からの画像削除
         elif method == "deleteAdminImage":
             sheetName = args[0]
             code = args[1]
@@ -481,7 +490,7 @@ async def rpc_endpoint(req: Request):
                     supabase.table("mercari_items").update({"images": imgs}).eq("item_code", code).execute()
             return {"data": "OK"}
 
-        # 14. 画像の追加（バグ修正済）
+        # 14. 画像の追加
         elif method == "addAdminImages":
             sheetName = args[0]
             code = args[1]
@@ -495,7 +504,7 @@ async def rpc_endpoint(req: Request):
                 supabase.table("mercari_items").update({"images": imgs}).eq("item_code", code).execute()
             return {"data": "OK"}
 
-        # 15. 画像の一括入れ替え（バグ修正済）
+        # 15. 画像の一括入れ替え
         elif method == "replaceItemImages":
             sheetName = args[0]
             itemCode = args[1]
@@ -565,7 +574,7 @@ async def rpc_endpoint(req: Request):
                 supabase.table("mercari_items").update({"batch_name": target_batch}).eq("item_code", c).execute()
             return {"data": "OK"}
 
-        # 21. インセンティブ集計（今回はUI連携のみ）
+        # 21. インセンティブ集計
         elif method == "fetchIncentiveData":
             return {"data": []}
 
@@ -573,6 +582,22 @@ async def rpc_endpoint(req: Request):
         elif method == "deleteItemData":
             code = args[1]
             supabase.table("mercari_items").delete().eq("item_code", code).execute()
+            return {"data": "OK"}
+
+        # 23. ★新規追加：現在のバッチ（枠）の一括削除
+        elif method == "deleteBatch":
+            batch_name = args[0]
+            if not batch_name or batch_name == "デフォルトバッチ":
+                return {"data": "エラー: この枠は削除できません"}
+            
+            # 指定されたバッチに紐づくすべてのアイテムと目印データを削除
+            supabase.table("mercari_items").delete().eq("batch_name", batch_name).execute()
+            
+            # もしシステム設定（記憶）が削除されたバッチを向いていたら、設定をリセット
+            config = get_batch_settings()
+            if config.get("sheetName") == batch_name:
+                supabase.table("mercari_items").delete().eq("item_code", "SYSTEM_SETTINGS").execute()
+                
             return {"data": "OK"}
             
         else:
