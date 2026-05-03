@@ -9,17 +9,17 @@ import requests
 import unicodedata
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import HTMLResponse
+
 from supabase import create_client, Client
 
 # --- 環境設定 ---
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-# ★追加：APIキーを裏側に直接埋め込みました！これで環境変数漏れでも絶対に動きます。
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyA3oxQCe8OAiU571mhSWr6FZuE26rVxZ74")
 PUBLIC_URL = "https://pub-8e4386156d26427f861486afe0381fb4.r2.dev"
 
-# ★GASからブランドマスタを引っ張ってくるための設定（ご指定のURLに更新済です）
+# ★GASからブランドマスタを引っ張ってくるための設定
 SPREADSHEET_ID = '1kpKObKqse7sfcG_VByhF1uWeMRTdFYPAu4VS0eqh6PU'
 GAS_API_URL = "https://script.google.com/macros/s/AKfycbwX3CsxVEfZ1OUa5ytPkBmsElpihy6hKrm_vzW_KOlyX25Xim6jLNmW3fEflUF16B37/exec"
 
@@ -34,9 +34,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ★【最重要】ブラウザの古いキャッシュを強制的に破棄させる処理
 @app.get("/")
 def read_root():
-    return FileResponse("index.html")
+    with open("index.html", "r", encoding="utf-8") as f:
+        html = f.read()
+    return HTMLResponse(content=html, headers={
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0"
+    })
 
 # ==========================================
 # 共通機能・設定管理
@@ -124,14 +131,14 @@ def analyze_image_with_gemini(base64_img: str, keywords: str):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     payload = {"contents": [{"parts": [{"text": prompt}, {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}]}]}
     try:
-        # ★修正：AIが答えるまでの猶予を60秒に延長し、どんな返事が来ても「文章」だけを確実に抜き取るように頑丈化
         res = requests.post(url, json=payload, timeout=60)
-        res.raise_for_status()
+        if res.status_code != 200:
+            return {"intro": f"※AI通信エラー({res.status_code}): {res.text[:100]}"}
         data = res.json()
         if "candidates" not in data or not data["candidates"]:
-            return {"intro": "※AIエラー: 生成結果が空です。"}
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
+            return {"intro": f"※AIブロック: {json.dumps(data.get('promptFeedback', '画像が不適切と判定された可能性があります'))}"}
         
+        text = data["candidates"][0]["content"]["parts"][0]["text"]
         text = text.replace("```json", "").replace("```", "").strip()
         m = re.search(r'\{.*\}', text, re.DOTALL)
         if m:
@@ -140,9 +147,9 @@ def analyze_image_with_gemini(base64_img: str, keywords: str):
         try:
             return json.loads(text)
         except Exception as e:
-            return {"intro": f"※AIパースエラー: {str(e)} / AIの返答: {text[:50]}..."}
+            return {"intro": f"※AIパースエラー: {str(e)} / AI返答: {text[:50]}..."}
     except Exception as e:
-        return {"intro": f"※AI通信エラー: {str(e)}"}
+        return {"intro": f"※AIタイムアウト等エラー: {str(e)}"}
 
 def build_description(intro, status, sz_input):
     return f"数ある商品の中からこちらのページをご覧頂きまして誠にありがとうございます(^w^)b\n\n{intro or ''}\n\n状態：{status}\n\n 　 ※あくまでも中古品、新品であっても保管品でございますので、微細なダメージの見落としが発生する可能性が高いです。予めご了承頂きたく願います。\n\nサイズ表記：{sz_input}\n【寸法データ未入力（後ほど計測します）】\n\n平置きの実寸採寸でございます。多少の誤差はお許し頂けましたら幸いです。\n\n送料：全アイテム送料込み、送料無料です！\n\n※佐川急便、ゆうパケット又はヤマト運輸宅急便、ネコポスの予定でございます。選択は不可でございます。\n\n\nスニーカー、ブーツ、ビンテージジーンズ、メンズウエア、アメカジウエア、ライダースジャケット、バイク用品、スポーツウエア、アイウエアetc……..\n超超超高価買取させて頂きます！！ご相談だけでもどうぞ気軽にお問い合わせくださいませ！！量が多い場合は出張買取も承ります！！業者様、古着店様からの買取依頼も大大大歓迎です！！"
@@ -541,7 +548,7 @@ async def rpc_endpoint(req: Request):
             }).eq("item_code", code).execute()
             return {"data": "OK"}
             
-        # 17. ★修正：AI再生成の即時反映とエラー内容の具体的な通知
+        # 17. AI再生成（即時反映とエラー通知の実装）
         elif method == "retryAIGeneration":
             code = args[1]
             new_status = args[2]
@@ -557,8 +564,8 @@ async def rpc_endpoint(req: Request):
                         b64 = base64.b64encode(img_res.content).decode('utf-8')
                         ai_data = analyze_image_with_gemini(b64, str(item.get("keywords", "")))
                         
-                        if "※AIエラー" in str(ai_data):
-                            return {"error": f"AI生成自体は完了しましたが、中身がエラーです: {ai_data.get('intro')}"}
+                        if "※AI" in str(ai_data.get("intro", "")):
+                            return {"error": f"AI生成自体は完了しましたがエラーが含まれます: {ai_data.get('intro')}"}
                         
                         gender = "メンズ" if "メンズ" in str(item.get("category_text", "")) else "レディース" if "レディース" in str(item.get("category_text", "")) else ""
                         status_to_use = new_status if new_status else str(item.get("status_text", ""))
@@ -569,7 +576,6 @@ async def rpc_endpoint(req: Request):
                             "title": title, "description": desc, "status_text": status_to_use
                         }).eq("item_code", code).execute()
                         
-                        # ★画面のテキストボックスを即座に書き換えるために、作った文章を直接返す！
                         return {"data": {"title": title, "desc": desc}}
                     except Exception as e:
                         return {"error": f"画像取得またはAI生成エラー: {str(e)}"}
@@ -629,7 +635,7 @@ async def rpc_endpoint(req: Request):
                 
             return {"data": "OK"}
             
-        # 24. ★新規追加：長押しで順番を並び替えた際、その順番通りにDBを上書きする
+        # 24. 長押しで順番を並び替えた際、その順番通りにDBを上書きする
         elif method == "reorderItemImages":
             sheetName = args[0]
             itemCode = args[1]
