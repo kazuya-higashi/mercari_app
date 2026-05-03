@@ -15,12 +15,13 @@ from supabase import create_client, Client
 # --- 環境設定 ---
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+# ★追加：APIキーを裏側に直接埋め込みました！これで環境変数漏れでも絶対に動きます。
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyA3oxQCe8OAiU571mhSWr6FZuE26rVxZ74")
 PUBLIC_URL = "https://pub-8e4386156d26427f861486afe0381fb4.r2.dev"
 
-# ★GASからブランドマスタを引っ張ってくるための設定
+# ★GASからブランドマスタを引っ張ってくるための設定（ご指定のURLに更新済です）
 SPREADSHEET_ID = '1kpKObKqse7sfcG_VByhF1uWeMRTdFYPAu4VS0eqh6PU'
-GAS_API_URL = "https://script.google.com/macros/s/AKfycbwX3CsxVEfZ1OUa5ytPkBmsElpihy6hKrm_vzW_KOlyX25Xim6jLNmW3fEflUF16B37/exec" # ※ご自身でデプロイしたURLに書き換えてください
+GAS_API_URL = "https://script.google.com/macros/s/AKfycbwX3CsxVEfZ1OUa5ytPkBmsElpihy6hKrm_vzW_KOlyX25Xim6jLNmW3fEflUF16B37/exec"
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL else None
 app = FastAPI()
@@ -123,20 +124,25 @@ def analyze_image_with_gemini(base64_img: str, keywords: str):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     payload = {"contents": [{"parts": [{"text": prompt}, {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}]}]}
     try:
-        res = requests.post(url, json=payload, timeout=30)
+        # ★修正：AIが答えるまでの猶予を60秒に延長し、どんな返事が来ても「文章」だけを確実に抜き取るように頑丈化
+        res = requests.post(url, json=payload, timeout=60)
         res.raise_for_status()
         data = res.json()
         if "candidates" not in data or not data["candidates"]:
             return {"intro": "※AIエラー: 生成結果が空です。"}
         text = data["candidates"][0]["content"]["parts"][0]["text"]
         
-        # ★【重要修正】Geminiが余計な文字を付けてきても、強制的にJSON部分だけを抜き出すように頑丈化
+        text = text.replace("```json", "").replace("```", "").strip()
         m = re.search(r'\{.*\}', text, re.DOTALL)
         if m:
             text = m.group(0)
-        return json.loads(text.strip())
+            
+        try:
+            return json.loads(text)
+        except Exception as e:
+            return {"intro": f"※AIパースエラー: {str(e)} / AIの返答: {text[:50]}..."}
     except Exception as e:
-        return {"intro": f"※AIエラー発生: {str(e)}"}
+        return {"intro": f"※AI通信エラー: {str(e)}"}
 
 def build_description(intro, status, sz_input):
     return f"数ある商品の中からこちらのページをご覧頂きまして誠にありがとうございます(^w^)b\n\n{intro or ''}\n\n状態：{status}\n\n 　 ※あくまでも中古品、新品であっても保管品でございますので、微細なダメージの見落としが発生する可能性が高いです。予めご了承頂きたく願います。\n\nサイズ表記：{sz_input}\n【寸法データ未入力（後ほど計測します）】\n\n平置きの実寸採寸でございます。多少の誤差はお許し頂けましたら幸いです。\n\n送料：全アイテム送料込み、送料無料です！\n\n※佐川急便、ゆうパケット又はヤマト運輸宅急便、ネコポスの予定でございます。選択は不可でございます。\n\n\nスニーカー、ブーツ、ビンテージジーンズ、メンズウエア、アメカジウエア、ライダースジャケット、バイク用品、スポーツウエア、アイウエアetc……..\n超超超高価買取させて頂きます！！ご相談だけでもどうぞ気軽にお問い合わせくださいませ！！量が多い場合は出張買取も承ります！！業者様、古着店様からの買取依頼も大大大歓迎です！！"
@@ -265,7 +271,13 @@ async def rpc_endpoint(req: Request):
             b64 = d["images"][0]["data"] if d.get("images") and d["images"][0]["data"] != "DUMMY" else ""
             
             ai_data = {}
-            if b64: ai_data = analyze_image_with_gemini(b64, d.get("keywords", ""))
+            if b64: 
+                try:
+                    ai_data = analyze_image_with_gemini(b64, d.get("keywords", ""))
+                except Exception as e:
+                    ai_data = {"intro": f"※AI内部エラー: {str(e)}"}
+            else:
+                ai_data = {"intro": "※画像が空のためAI生成をスキップしました"}
             
             gender = "メンズ" if "メンズ" in d.get("categoryText", "") else "レディース" if "レディース" in d.get("categoryText", "") else ""
             title = build_title(d, ai_data, gender, code)
@@ -529,7 +541,7 @@ async def rpc_endpoint(req: Request):
             }).eq("item_code", code).execute()
             return {"data": "OK"}
             
-        # 17. ★【重要修正】AI再生成（即時反映できるように生成したデータを返し、エラーは握りつぶさずに通知する）
+        # 17. ★修正：AI再生成の即時反映とエラー内容の具体的な通知
         elif method == "retryAIGeneration":
             code = args[1]
             new_status = args[2]
@@ -540,10 +552,14 @@ async def rpc_endpoint(req: Request):
                 if imgs and imgs[0]:
                     img_url = f"{PUBLIC_URL}/{imgs[0]}"
                     try:
-                        img_res = requests.get(img_url)
+                        img_res = requests.get(img_url, timeout=15)
                         img_res.raise_for_status()
                         b64 = base64.b64encode(img_res.content).decode('utf-8')
                         ai_data = analyze_image_with_gemini(b64, str(item.get("keywords", "")))
+                        
+                        if "※AIエラー" in str(ai_data):
+                            return {"error": f"AI生成自体は完了しましたが、中身がエラーです: {ai_data.get('intro')}"}
+                        
                         gender = "メンズ" if "メンズ" in str(item.get("category_text", "")) else "レディース" if "レディース" in str(item.get("category_text", "")) else ""
                         status_to_use = new_status if new_status else str(item.get("status_text", ""))
                         title = build_title(item, ai_data, gender, code)
@@ -553,13 +569,13 @@ async def rpc_endpoint(req: Request):
                             "title": title, "description": desc, "status_text": status_to_use
                         }).eq("item_code", code).execute()
                         
-                        # 画面側に即時反映させるため、生成したタイトルと説明文を返す
+                        # ★画面のテキストボックスを即座に書き換えるために、作った文章を直接返す！
                         return {"data": {"title": title, "desc": desc}}
                     except Exception as e:
-                        return {"error": f"AI生成エラー: {str(e)}"}
+                        return {"error": f"画像取得またはAI生成エラー: {str(e)}"}
                 else:
-                    return {"error": "画像が見つからないため生成できません。"}
-            return {"error": "アイテムが見つかりません。"}
+                    return {"error": "アイテムに画像が登録されていないため再生成できません。"}
+            return {"error": "対象のアイテムがデータベースに見つかりません。"}
 
         # 18. 管理番号の強制修正
         elif method == "fixManagementCode":
@@ -599,7 +615,7 @@ async def rpc_endpoint(req: Request):
             supabase.table("mercari_items").delete().eq("item_code", code).execute()
             return {"data": "OK"}
 
-        # 23. 現在のバッチ（枠）の一括削除
+        # 23. 現在のバッチの一括削除
         elif method == "deleteBatch":
             batch_name = args[0]
             if not batch_name or batch_name == "デフォルトバッチ":
@@ -611,6 +627,19 @@ async def rpc_endpoint(req: Request):
             if config.get("sheetName") == batch_name:
                 supabase.table("mercari_items").delete().eq("item_code", "SYSTEM_SETTINGS").execute()
                 
+            return {"data": "OK"}
+            
+        # 24. ★新規追加：長押しで順番を並び替えた際、その順番通りにDBを上書きする
+        elif method == "reorderItemImages":
+            sheetName = args[0]
+            itemCode = args[1]
+            newOrder = args[2]
+            
+            updateArr = []
+            for i in range(20):
+                updateArr.append(newOrder[i] if i < len(newOrder) else "")
+                
+            supabase.table("mercari_items").update({"images": updateArr}).eq("item_code", itemCode).execute()
             return {"data": "OK"}
             
         else:
