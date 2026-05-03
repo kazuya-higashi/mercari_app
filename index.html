@@ -219,9 +219,9 @@
               <video id="camera-stream" autoplay playsinline></video>
           </div>
           <div class="shutter-btn" onclick="takePhoto()"></div>
-          <div style="font-size: 11px; color: #666; text-align: center; margin-bottom: 5px;">シャッターを押して連続撮影 (最大20枚)</div>
+          <div style="font-size: 11px; color: #666; text-align: center; margin-bottom: 5px;">シャッターを押して連続撮影 (<span id="photo-count-display">0</span>/20枚)</div>
           <div class="preview-list" id="preview-list"></div>
-          <canvas id="capture-canvas" style="display:none;" width="800" height="800"></canvas>
+          <canvas id="capture-canvas" style="display:none;" width="600" height="600"></canvas>
         </div>
 
         <button type="button" id="submitNewBtn" class="submit-btn" onclick="startSubmissionProcess()">送信する</button>
@@ -562,12 +562,16 @@
         const size = Math.min(video.videoWidth, video.videoHeight);
         const startX = (video.videoWidth - size) / 2;
         const startY = (video.videoHeight - size) / 2;
-        ctx.drawImage(video, startX, startY, size, size, 0, 0, 800, 800);
+        
+        canvas.width = 600; 
+        canvas.height = 600;
+        ctx.drawImage(video, startX, startY, size, size, 0, 0, 600, 600);
         
         canvas.toBlob((blob) => {
             capturedBlobs.push(blob);
+            document.getElementById('photo-count-display').innerText = capturedBlobs.length;
             renderPreviews();
-        }, 'image/jpeg', 0.6);
+        }, 'image/jpeg', 0.4);
     }
 
     function renderPreviews() {
@@ -581,6 +585,7 @@
 
     function deletePhoto(idx) {
         capturedBlobs.splice(idx, 1);
+        document.getElementById('photo-count-display').innerText = capturedBlobs.length;
         renderPreviews();
     }
 
@@ -693,7 +698,7 @@
         }, 1000);
     });
 
-    function compressImage(file, maxSide = 800, quality = 0.5) {
+    function compressImage(file, maxSide = 600, quality = 0.4) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -778,7 +783,10 @@
       document.getElementById('submitNewBtn').innerText="処理中..."; 
       document.getElementById('bg-status-badge').style.display="block";
       
-      capturedBlobs = []; renderPreviews();
+      capturedBlobs = []; 
+      let countDisp = document.getElementById('photo-count-display');
+      if(countDisp) countDisp.innerText = 0;
+      renderPreviews();
 
       google.script.run.withFailureHandler(function(e){ 
           isUploadingBackground=false; document.getElementById('submitNewBtn').disabled=false; document.getElementById('submitNewBtn').innerText="送信する"; document.getElementById('bg-status-badge').style.display="none";
@@ -954,7 +962,7 @@
       if(!this.files.length) return; 
       showLoading("梱包写真を圧縮中..."); 
       try {
-        let b = (await compressImage(this.files[0], 800, 0.5)).split(',')[1]; 
+        let b = (await compressImage(this.files[0], 600, 0.4)).split(',')[1]; 
         showLoading("梱包完了処理中...");
         google.script.run
         .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
@@ -973,7 +981,7 @@
       if(!this.files.length) return; 
       showLoading("梱包写真を圧縮中..."); 
       try {
-        let b = (await compressImage(this.files[0], 800, 0.5)).split(',')[1]; 
+        let b = (await compressImage(this.files[0], 600, 0.4)).split(',')[1]; 
         showLoading("梱包完了処理中...");
         google.script.run
         .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
@@ -1273,16 +1281,15 @@
       let newStatus = document.getElementById('editItemStatus').value;
       google.script.run
       .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
-      .withSuccessHandler(function(r){
-        if(r==="OK"){
-          google.script.run
-          .withFailureHandler(function(e){ hideLoading(); alert("再生成エラー: " + e.message); })
-          .withSuccessHandler(function(res){
-            hideLoading();
-            if(!res.error){ alert("再生成が完了しました。\n※最新の内容を画面に反映するには、一度閉じて開き直してください。"); loadAdminList(currentAdminSheet); } else alert(res.error);
-          }).retryAIGeneration(currentAdminSheet,currentEditCode,newStatus);
-        } else { hideLoading(); alert("保存エラー: " + r); }
-      }).updateItemTextData(currentAdminSheet,currentEditCode,document.getElementById('editTextTitle').value,document.getElementById('editTextDesc').value,document.getElementById('editTextDims').value,newStatus); 
+      .withSuccessHandler(function(res){
+        hideLoading();
+        if(res && res.title && res.desc){
+          document.getElementById('editTextTitle').value = res.title;
+          document.getElementById('editTextDesc').value = res.desc;
+          alert("再生成が完了し、即時反映しました！"); 
+          loadAdminList(currentAdminSheet); 
+        } else { alert("再生成エラー: " + (res.error || "不明なエラー")); }
+      }).retryAIGeneration(currentAdminSheet, currentEditCode, newStatus); 
     }
 
     function submitCodeEdit(){ let o=document.getElementById('editOldCodeInput').value,n=document.getElementById('editNewCodeInput').value.trim().toUpperCase(); if(!n||o===n||!confirm("修正しますか？"))return; closeEditModal(); showLoading("修正中..."); google.script.run.withFailureHandler(function(e){hideLoading();alert(e.message);}).withSuccessHandler(function(r){hideLoading();if(r==="OK")loadAdminList(currentAdminSheet);else alert(r);}).fixManagementCode(currentAdminSheet,o,n); }
