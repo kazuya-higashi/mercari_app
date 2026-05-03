@@ -488,16 +488,6 @@
 
     let lastAdminData = null; 
 
-    // ★★★ 魔法の変換コード：GASの通信(google.script.run)をPythonへ流す ★★★
-    const BACKEND_URL = 'https://mercari-backend-hpof.onrender.com';
-    const rpcMethods = [
-      "getBrandList", "checkBatchFull", "reserveNewCode", "processHeavyData",
-      "getPendingMeasurements", "saveMeasurement", "getPendingPackings",
-      "getItemImagesForAdmin", "savePackingPhotoAndAssignCode", "getAdminData",
-      "replaceItemImages", "deleteAdminImage", "addAdminImages", "updateItemTextData",
-      "retryAIGeneration", "fixManagementCode", "deleteItemData", "revertPackingStatus",
-      "fetchIncentiveData", "getBatchDownloadData", "moveItemsToBatch", "saveBatchSettings",
-      "deleteBatch", "reorderItemImages"
     ];
     const google = {
       script: {
