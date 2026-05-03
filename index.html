@@ -282,8 +282,10 @@
         <span style="padding:4px 8px; border-radius:6px; background:#FFDE59; color:#111; display:flex; align-items:center;">梱包済</span>
       </div>
       <div id="admin-list"></div>
-      <div style="text-align:center; margin-top:30px; padding-bottom:10px;">
+      
+      <div style="text-align:center; margin-top:30px; padding-bottom:10px; display:flex; justify-content:center; gap:10px;">
         <button onclick="openBatchSettingsModal()" style="background:#fff; border:1px solid #111; padding:10px 20px; border-radius:8px; font-size:13px; font-weight:normal; cursor:pointer;">次の納品分を設定</button>
+        <button onclick="deleteCurrentBatch()" style="background:#fff; border:1px solid #d32f2f; color:#d32f2f; padding:10px 20px; border-radius:8px; font-size:13px; font-weight:normal; cursor:pointer;">現在の枠を削除</button>
       </div>
     </div>
   </div>
@@ -490,7 +492,8 @@
       "getItemImagesForAdmin", "savePackingPhotoAndAssignCode", "getAdminData",
       "replaceItemImages", "deleteAdminImage", "addAdminImages", "updateItemTextData",
       "retryAIGeneration", "fixManagementCode", "deleteItemData", "revertPackingStatus",
-      "fetchIncentiveData", "getBatchDownloadData", "moveItemsToBatch", "saveBatchSettings"
+      "fetchIncentiveData", "getBatchDownloadData", "moveItemsToBatch", "saveBatchSettings",
+      "deleteBatch"
     ];
     const google = {
       script: {
@@ -615,7 +618,6 @@
       document.getElementById('imagePreviewModal').style.display = 'flex';
     }
 
-    // ★★★ 修正ポイント：記憶の復元と古いキャッシュの完全消去 ★★★
     document.addEventListener('DOMContentLoaded', function() { 
       let g = localStorage.getItem('dailyMeasureGoal'); 
       if(g) { let dailyGoalInput = document.getElementById('dailyGoalInput'); if(dailyGoalInput) dailyGoalInput.value = g; }
@@ -1030,9 +1032,30 @@
       }).saveBatchSettings({sheetName:n,prefix:p,start:s,end:e,suffix:sx}); 
     }
 
-    // ★★★ 修正ポイント：管理ボタンを押した時に、必ず今の記憶(バッチ)を優先して表示する ★★★
+    function deleteCurrentBatch() {
+      if (!currentAdminSheet || currentAdminSheet === "デフォルトバッチ") {
+        alert("この枠は削除できません。");
+        return;
+      }
+      if (!confirm(`本当に現在の枠「${currentAdminSheet}」を削除しますか？\n※この枠内に登録されているアイテムデータもすべて削除され、元に戻せません！`)) return;
+      
+      showLoading("枠を削除中...");
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
+      .withSuccessHandler(function(r){
+        hideLoading();
+        if(r === "OK") {
+          alert("枠を削除しました。");
+          activeBatchSheet = "";
+          localStorage.removeItem('activeBatchSheet');
+          loadAdminList(""); 
+        } else {
+          alert(r);
+        }
+      }).deleteBatch(currentAdminSheet);
+    }
+
     function loadAdminList(target=""){
-      // target（開くバッチの指定）が空っぽで、かつシステムに記憶（activeBatchSheet）があれば、それを開くようにストッパーをかける！
       if (!target && activeBatchSheet) {
           target = activeBatchSheet;
       }
@@ -1045,7 +1068,7 @@
         currentAdminSheet=res.currentViewSheet; lastAdminData = res.itemMap; 
         activeBatchSheet = currentAdminSheet; localStorage.setItem('activeBatchSheet', activeBatchSheet);
         
-        let p="OM", st=1, sx="HG", en=0, m=currentAdminSheet.match(/^([A-Za-z]+)(\d+)([A-Za-z]+)〜([A-Za-z]+)(\d+)([A-Za-z]+)$/);
+        let p="OM", st=1, sx="HG", en=0, m=currentAdminSheet.match(/^([A-Za-z]+)(\d+)([A-Za-z]+)[〜～\-]+([A-Za-z]+)(\d+)([A-Za-z]+)$/);
         if(m){p=m[1];st=parseInt(m[2]);sx=m[3];en=parseInt(m[5]);}
 
         let listedCnt=0, measuredCnt=0, packedCnt=0;
