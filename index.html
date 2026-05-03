@@ -14,8 +14,8 @@
   <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1438.0.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-  <!-- ★追加：スマホの長押し並び替えを可能にする魔法のツール -->
-  <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+  <!-- スマホの長押し並び替え用ツール -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
   
   <style>
     * { touch-action: manipulation; }
@@ -77,9 +77,10 @@
     .shutter-btn { width: 64px; height: 64px; border-radius: 50%; background: #FF90E8; border: 4px solid #fff; outline: 3px solid #111; cursor: pointer; margin: 0 auto 5px auto; transition: 0.1s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
     .shutter-btn:active { transform: scale(0.9); background: #d53f8c; }
     .preview-list { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; min-height: 70px; }
-    .preview-item { position: relative; flex-shrink: 0; }
+    .preview-item { position: relative; flex-shrink: 0; cursor: grab; }
+    .preview-item:active { cursor: grabbing; }
     .preview-img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid #111; }
-    .delete-btn-cam { position: absolute; top: -6px; right: -6px; background: #d32f2f; color: #fff; border-radius: 50%; width: 22px; height: 22px; font-size: 14px; font-weight:bold; border: 1px solid #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .delete-btn-cam { position: absolute; top: -6px; right: -6px; background: #d32f2f; color: #fff; border-radius: 50%; width: 22px; height: 22px; font-size: 14px; font-weight:bold; border: 1px solid #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index:10; }
 
     .overlay-modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:2000;justify-content:center;align-items:center;padding:20px;backdrop-filter:blur(4px);}
     .modal-content{background:#fff;padding:24px;border-radius:16px;border:1px solid #111;text-align:center;width:100%;max-width:360px;max-height:90vh;overflow-y:auto;}
@@ -138,11 +139,10 @@
     .mini-spinner{display:inline-block;width:10px;height:10px;border:2px solid #555;border-top:2px solid #fff;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;margin-right:6px;}
 
     .admin-image-gallery { display:flex; gap:8px; overflow-x:auto; padding:4px 0 10px 0; }
-    /* ★追加：画像の長押し＆ドラッグ用スタイル */
     .admin-image-item { position:relative; flex-shrink:0; cursor:grab; transition: opacity 0.2s; }
     .admin-image-item:active { cursor:grabbing; }
     .admin-image-img { width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid #ddd; }
-    .admin-image-delete { position:absolute; top:-6px; right:-6px; background:#d32f2f; color:#fff; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:normal; cursor:pointer; }
+    .admin-image-delete { position:absolute; top:-6px; right:-6px; background:#d32f2f; color:#fff; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:normal; cursor:pointer; z-index:10; }
   </style>
 </head>
 <body>
@@ -223,7 +223,7 @@
               <video id="camera-stream" autoplay playsinline></video>
           </div>
           <div class="shutter-btn" onclick="takePhoto()"></div>
-          <div style="font-size: 11px; color: #666; text-align: center; margin-bottom: 5px;">シャッターを押して連続撮影 (<span id="photo-count-display">0</span>/20枚)</div>
+          <div style="font-size: 11px; color: #666; text-align: center; margin-bottom: 5px;">シャッターを押して連続撮影 (<span id="photo-count-display">0</span>/20枚)<br><span style="font-size:9px;">※画像を長押しで並び替えできます</span></div>
           <div class="preview-list" id="preview-list"></div>
           <canvas id="capture-canvas" style="display:none;" width="600" height="600"></canvas>
         </div>
@@ -543,6 +543,9 @@
     let cameraStream = null;
     let capturedBlobs = [];
     
+    // ★出品時の並び替え用変数
+    let previewSortableInstance = null;
+    
     async function initCamera() {
         if (cameraStream) return;
         try {
@@ -567,14 +570,12 @@
         const startX = (video.videoWidth - size) / 2;
         const startY = (video.videoHeight - size) / 2;
         
-        // ★修正：画質とサイズをメルカリの限界まで下げる（600px, 0.4）
         canvas.width = 600; 
         canvas.height = 600;
         ctx.drawImage(video, startX, startY, size, size, 0, 0, 600, 600);
         
         canvas.toBlob((blob) => {
-            capturedBlobs.push(blob);
-            // ★修正：撮影枚数を即時反映
+            capturedBlobs.push({ id: Date.now() + Math.random(), blob: blob });
             document.getElementById('photo-count-display').innerText = capturedBlobs.length;
             renderPreviews();
         }, 'image/jpeg', 0.4);
@@ -583,14 +584,31 @@
     function renderPreviews() {
         const list = document.getElementById('preview-list');
         list.innerHTML = '';
-        capturedBlobs.forEach((blob, idx) => {
-            const url = URL.createObjectURL(blob);
-            list.innerHTML += `<div class="preview-item"><img src="${url}" class="preview-img"><button type="button" class="delete-btn-cam" onclick="deletePhoto(${idx})">×</button></div>`;
+        capturedBlobs.forEach((item, idx) => {
+            const url = URL.createObjectURL(item.blob);
+            list.innerHTML += `<div class="preview-item" data-id="${item.id}"><img src="${url}" class="preview-img"><button type="button" class="delete-btn-cam" onclick="deletePhoto('${item.id}')">×</button><div style="position:absolute; bottom:2px; left:2px; background:rgba(0,0,0,0.5); color:#fff; font-size:10px; padding:2px; border-radius:4px; pointer-events:none;">🔄</div></div>`;
+        });
+        
+        if(previewSortableInstance) previewSortableInstance.destroy();
+        previewSortableInstance = new Sortable(list, {
+            animation: 150,
+            delay: 200,
+            delayOnTouchOnly: true,
+            onEnd: function (evt) {
+                // 並び替えた配列を更新
+                const newOrderIds = Array.from(list.children).map(el => el.getAttribute('data-id'));
+                let newBlobs = [];
+                newOrderIds.forEach(id => {
+                    let found = capturedBlobs.find(b => String(b.id) === String(id));
+                    if(found) newBlobs.push(found);
+                });
+                capturedBlobs = newBlobs;
+            }
         });
     }
 
-    function deletePhoto(idx) {
-        capturedBlobs.splice(idx, 1);
+    function deletePhoto(id) {
+        capturedBlobs = capturedBlobs.filter(b => String(b.id) !== String(id));
         document.getElementById('photo-count-display').innerText = capturedBlobs.length;
         renderPreviews();
     }
@@ -746,7 +764,7 @@
 
         for (let i = 0; i < capturedBlobs.length; i++) {
             const fileName = `${targetCode}-${i + 1}.jpg`;
-            const params = { Bucket: BUCKET_NAME, Key: fileName, Body: capturedBlobs[i], ContentType: 'image/jpeg' };
+            const params = { Bucket: BUCKET_NAME, Key: fileName, Body: capturedBlobs[i].blob, ContentType: 'image/jpeg' };
             try { await s3.putObject(params).promise(); } catch (err) { uploadErrors++; console.error("R2 Upload Error:", err); }
         }
         
@@ -758,7 +776,7 @@
         const aiThumbBase64 = await new Promise(resolve => {
             const reader = new FileReader();
             reader.onloadend = () => resolve(reader.result.split(',')[1]);
-            reader.readAsDataURL(capturedBlobs[0]);
+            reader.readAsDataURL(capturedBlobs[0].blob);
         });
 
         let dummyImages = capturedBlobs.map((b, idx) => {
@@ -1115,12 +1133,12 @@
           let d=res.itemMap[c]; 
           if(!d){ html+=`<div class="batch-item item-empty" style="padding-left:10px;"><div style="display:flex;align-items:center;"><span style="font-size:10px;">${c}</span></div></div>`; return; }
           let sd=encodeURIComponent(JSON.stringify(d)).replace(/'/g,"%27");
-          let hasAIError = (d.desc && d.desc.includes("※AIエラー")); let isGenerated = !(!d.title || d.title.trim() === "" || !d.desc || d.desc.trim() === "" || hasAIError);
+          let hasAIError = (d.desc && d.desc.includes("※AI")); let isGenerated = !(!d.title || d.title.trim() === "" || !d.desc || d.desc.trim() === "" || hasAIError);
           let isMeasured = (d.dims && d.dims.trim() !== ""); let isPacked = (d.packStatus === "梱包完了"); let isShipped = (d.shipStatus === "配送完了");
           if(isShipped) shc++;
           let modalErrReason = "";
           let isMissingImg = (d.missingImages && d.missingImages.length > 0);
-          if(hasAIError) modalErrReason = "AIエラー（再生成してください）"; else if(!isGenerated) modalErrReason = "文章未生成（一括生成待ち）";
+          if(hasAIError) modalErrReason = "AIエラー発生（開いて再生成してください）"; else if(!isGenerated) modalErrReason = "文章未生成（一括生成待ち）";
           if(isMissingImg) modalErrReason = (modalErrReason ? modalErrReason + " / " : "") + "画像欠損(" + d.missingImages.length + "枚)";
 
           let bgClass = "item-active"; 
@@ -1175,7 +1193,8 @@
       }).getItemImagesForAdmin(currentAdminSheet, c);
     }
 
-    // ★修正：長押しで並び替えられるようにSortableJSを適用
+    let adminSortableInstance = null;
+
     function renderAdminImages(images) {
       let html = "";
       if(!images || images.length === 0) {
@@ -1186,6 +1205,7 @@
             html += `<div class="admin-image-item" data-name="${img.name}">
                        <img src="${src}" class="admin-image-img" onclick="showFullImage(event, '${src}')">
                        <div class="admin-image-delete" onclick="deleteAdminImageExecute('${img.name}')">×</div>
+                       <div style="position:absolute; bottom:2px; left:2px; background:rgba(0,0,0,0.5); color:#fff; font-size:10px; padding:2px; border-radius:4px; pointer-events:none;">🔄</div>
                      </div>`;
           });
       }
@@ -1193,16 +1213,16 @@
       gallery.innerHTML = html;
       
       if(images && images.length > 0) {
-          new Sortable(gallery, {
+          if(adminSortableInstance) adminSortableInstance.destroy();
+          adminSortableInstance = new Sortable(gallery, {
               animation: 150,
-              delay: 300, // 長押しで掴めるようにする
-              delayOnTouchOnly: true, // タッチデバイスのみ長押し
+              delay: 200, 
+              delayOnTouchOnly: true, 
               onEnd: function () { saveImageOrder(); }
           });
       }
     }
 
-    // ★追加：並び替えた順番を保存する処理
     function saveImageOrder() {
       let items = document.querySelectorAll('#adminImageGallery .admin-image-item');
       let newOrder = Array.from(items).map(item => item.getAttribute('data-name'));
@@ -1310,7 +1330,7 @@
       .updateItemTextData(currentAdminSheet,currentEditCode,document.getElementById('editTextTitle').value,document.getElementById('editTextDesc').value,document.getElementById('editTextDims').value,newStatus); 
     }
 
-    // ★修正：再生成の即時反映＆エラー詳細の表示
+    // ★修正：即時反映とエラー表示
     function executeRetryAI(){ 
       if(!confirm("AI再生成しますか？\n※選択中の「商品の状態」を反映して文章を上書きします"))return; 
       showLoading("AIで文章を再生成中..."); 
@@ -1320,7 +1340,6 @@
       .withSuccessHandler(function(res){
         hideLoading();
         if(res && res.title && res.desc){
-          // 戻らなくても即座にテキストボックスの中身が切り替わる！
           document.getElementById('editTextTitle').value = res.title;
           document.getElementById('editTextDesc').value = res.desc;
           alert("再生成が完了し、即時反映しました！\n問題なければ左下の「保存」を押してください。"); 
