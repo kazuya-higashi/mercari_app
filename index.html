@@ -615,13 +615,12 @@
       document.getElementById('imagePreviewModal').style.display = 'flex';
     }
 
-    // ★★★ キャッシュ対策＆記憶の復元 ★★★
+    // ★★★ 修正ポイント：記憶の復元と古いキャッシュの完全消去 ★★★
     document.addEventListener('DOMContentLoaded', function() { 
       let g = localStorage.getItem('dailyMeasureGoal'); 
       if(g) { let dailyGoalInput = document.getElementById('dailyGoalInput'); if(dailyGoalInput) dailyGoalInput.value = g; }
       
       let savedBatch = localStorage.getItem('activeBatchSheet');
-      // もし古い不要な記憶（DB）があったら消す
       if (savedBatch === "DB") {
           savedBatch = null;
           localStorage.removeItem('activeBatchSheet');
@@ -1031,7 +1030,13 @@
       }).saveBatchSettings({sheetName:n,prefix:p,start:s,end:e,suffix:sx}); 
     }
 
+    // ★★★ 修正ポイント：管理ボタンを押した時に、必ず今の記憶(バッチ)を優先して表示する ★★★
     function loadAdminList(target=""){
+      // target（開くバッチの指定）が空っぽで、かつシステムに記憶（activeBatchSheet）があれば、それを開くようにストッパーをかける！
+      if (!target && activeBatchSheet) {
+          target = activeBatchSheet;
+      }
+      
       showLoading("読込中..."); 
       google.script.run
       .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
