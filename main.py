@@ -18,7 +18,7 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 PUBLIC_URL = "https://pub-8e4386156d26427f861486afe0381fb4.r2.dev"
 
-# ★追加：GASからブランドマスタを引っ張ってくるための設定
+# ★GASからブランドマスタを引っ張ってくるための設定
 SPREADSHEET_ID = '1kpKObKqse7sfcG_VByhF1uWeMRTdFYPAu4VS0eqh6PU'
 GAS_API_URL = "https://script.google.com/macros/s/AKfycbwX3CsxVEfZ1OUa5ytPkBmsElpihy6hKrm_vzW_KOlyX25Xim6jLNmW3fEflUF16B37/exec" # ※ご自身でデプロイしたURLに書き換えてください
 
@@ -123,10 +123,18 @@ def analyze_image_with_gemini(base64_img: str, keywords: str):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     payload = {"contents": [{"parts": [{"text": prompt}, {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}]}]}
     try:
-        res = requests.post(url, json=payload)
+        res = requests.post(url, json=payload, timeout=30)
         res.raise_for_status()
-        text = res.json()["candidates"][0]["content"]["parts"][0]["text"]
-        return json.loads(text.replace("```json", "").replace("```", "").strip())
+        data = res.json()
+        if "candidates" not in data or not data["candidates"]:
+            return {"intro": "※AIエラー: 生成結果が空です。"}
+        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        
+        # ★【重要修正】Geminiが余計な文字を付けてきても、強制的にJSON部分だけを抜き出すように頑丈化
+        m = re.search(r'\{.*\}', text, re.DOTALL)
+        if m:
+            text = m.group(0)
+        return json.loads(text.strip())
     except Exception as e:
         return {"intro": f"※AIエラー発生: {str(e)}"}
 
@@ -235,7 +243,7 @@ async def rpc_endpoint(req: Request):
             count = currentItems + 2
             return {"data": {"code": tempCode, "displayCount": count, "error": None}}
             
-        # 4. ブランド一覧（GASから直接取得するように変更済）
+        # 4. ブランド一覧（GASから直接取得）
         elif method == "getBrandList":
             try:
                 response = requests.get(f"{GAS_API_URL}?method=getBrandList")
@@ -521,7 +529,7 @@ async def rpc_endpoint(req: Request):
             }).eq("item_code", code).execute()
             return {"data": "OK"}
             
-        # 17. AI再生成
+        # 17. ★【重要修正】AI再生成（即時反映できるように生成したデータを返し、エラーは握りつぶさずに通知する）
         elif method == "retryAIGeneration":
             code = args[1]
             new_status = args[2]
@@ -533,18 +541,25 @@ async def rpc_endpoint(req: Request):
                     img_url = f"{PUBLIC_URL}/{imgs[0]}"
                     try:
                         img_res = requests.get(img_url)
+                        img_res.raise_for_status()
                         b64 = base64.b64encode(img_res.content).decode('utf-8')
                         ai_data = analyze_image_with_gemini(b64, str(item.get("keywords", "")))
                         gender = "メンズ" if "メンズ" in str(item.get("category_text", "")) else "レディース" if "レディース" in str(item.get("category_text", "")) else ""
                         status_to_use = new_status if new_status else str(item.get("status_text", ""))
                         title = build_title(item, ai_data, gender, code)
                         desc = build_description(ai_data.get("intro", ""), status_to_use, str(item.get("size_input", "")))
+                        
                         supabase.table("mercari_items").update({
                             "title": title, "description": desc, "status_text": status_to_use
                         }).eq("item_code", code).execute()
-                    except:
-                        pass
-            return {"data": "OK"}
+                        
+                        # 画面側に即時反映させるため、生成したタイトルと説明文を返す
+                        return {"data": {"title": title, "desc": desc}}
+                    except Exception as e:
+                        return {"error": f"AI生成エラー: {str(e)}"}
+                else:
+                    return {"error": "画像が見つからないため生成できません。"}
+            return {"error": "アイテムが見つかりません。"}
 
         # 18. 管理番号の強制修正
         elif method == "fixManagementCode":
@@ -584,16 +599,14 @@ async def rpc_endpoint(req: Request):
             supabase.table("mercari_items").delete().eq("item_code", code).execute()
             return {"data": "OK"}
 
-        # 23. ★新規追加：現在のバッチ（枠）の一括削除
+        # 23. 現在のバッチ（枠）の一括削除
         elif method == "deleteBatch":
             batch_name = args[0]
             if not batch_name or batch_name == "デフォルトバッチ":
                 return {"data": "エラー: この枠は削除できません"}
             
-            # 指定されたバッチに紐づくすべてのアイテムと目印データを削除
             supabase.table("mercari_items").delete().eq("batch_name", batch_name).execute()
             
-            # もしシステム設定（記憶）が削除されたバッチを向いていたら、設定をリセット
             config = get_batch_settings()
             if config.get("sheetName") == batch_name:
                 supabase.table("mercari_items").delete().eq("item_code", "SYSTEM_SETTINGS").execute()
