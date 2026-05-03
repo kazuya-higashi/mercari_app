@@ -14,6 +14,8 @@
   <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1438.0.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <!-- ★追加：スマホの長押し並び替えを可能にする魔法のツール -->
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
   
   <style>
     * { touch-action: manipulation; }
@@ -136,7 +138,9 @@
     .mini-spinner{display:inline-block;width:10px;height:10px;border:2px solid #555;border-top:2px solid #fff;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;margin-right:6px;}
 
     .admin-image-gallery { display:flex; gap:8px; overflow-x:auto; padding:4px 0 10px 0; }
-    .admin-image-item { position:relative; flex-shrink:0; }
+    /* ★追加：画像の長押し＆ドラッグ用スタイル */
+    .admin-image-item { position:relative; flex-shrink:0; cursor:grab; transition: opacity 0.2s; }
+    .admin-image-item:active { cursor:grabbing; }
     .admin-image-img { width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid #ddd; }
     .admin-image-delete { position:absolute; top:-6px; right:-6px; background:#d32f2f; color:#fff; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:normal; cursor:pointer; }
   </style>
@@ -346,7 +350,7 @@
 
       <div style="margin-bottom:10px; border-bottom:1px solid #eaeaea; padding-bottom:10px; text-align:left;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-          <label style="font-size:9px; font-weight:normal;">商品画像管理</label>
+          <label style="font-size:9px; font-weight:normal;">商品画像管理<br><span style="font-size:8px; color:#888;">※長押しで並び替え</span></label>
           <div style="display:flex; gap:4px;">
             <button class="modal-btn-sub" style="margin-top:0; padding:4px 8px; font-size:10px; width:auto; border-radius:6px;" onclick="document.getElementById('addAdminImageInput').click()">＋ 追加</button>
             <button class="modal-btn-danger" style="margin-top:0; padding:4px 8px; font-size:10px; width:auto; border-radius:6px;" onclick="document.getElementById('bulkReplaceImageInput').click()">🔄 全入替</button>
@@ -493,7 +497,7 @@
       "replaceItemImages", "deleteAdminImage", "addAdminImages", "updateItemTextData",
       "retryAIGeneration", "fixManagementCode", "deleteItemData", "revertPackingStatus",
       "fetchIncentiveData", "getBatchDownloadData", "moveItemsToBatch", "saveBatchSettings",
-      "deleteBatch"
+      "deleteBatch", "reorderItemImages"
     ];
     const google = {
       script: {
@@ -563,12 +567,14 @@
         const startX = (video.videoWidth - size) / 2;
         const startY = (video.videoHeight - size) / 2;
         
+        // ★修正：画質とサイズをメルカリの限界まで下げる（600px, 0.4）
         canvas.width = 600; 
         canvas.height = 600;
         ctx.drawImage(video, startX, startY, size, size, 0, 0, 600, 600);
         
         canvas.toBlob((blob) => {
             capturedBlobs.push(blob);
+            // ★修正：撮影枚数を即時反映
             document.getElementById('photo-count-display').innerText = capturedBlobs.length;
             renderPreviews();
         }, 'image/jpeg', 0.4);
@@ -1109,7 +1115,7 @@
           let d=res.itemMap[c]; 
           if(!d){ html+=`<div class="batch-item item-empty" style="padding-left:10px;"><div style="display:flex;align-items:center;"><span style="font-size:10px;">${c}</span></div></div>`; return; }
           let sd=encodeURIComponent(JSON.stringify(d)).replace(/'/g,"%27");
-          let hasAIError = (d.desc && d.desc.includes("※AIエラー発生")); let isGenerated = !(!d.title || d.title.trim() === "" || !d.desc || d.desc.trim() === "" || hasAIError);
+          let hasAIError = (d.desc && d.desc.includes("※AIエラー")); let isGenerated = !(!d.title || d.title.trim() === "" || !d.desc || d.desc.trim() === "" || hasAIError);
           let isMeasured = (d.dims && d.dims.trim() !== ""); let isPacked = (d.packStatus === "梱包完了"); let isShipped = (d.shipStatus === "配送完了");
           if(isShipped) shc++;
           let modalErrReason = "";
@@ -1169,6 +1175,7 @@
       }).getItemImagesForAdmin(currentAdminSheet, c);
     }
 
+    // ★修正：長押しで並び替えられるようにSortableJSを適用
     function renderAdminImages(images) {
       let html = "";
       if(!images || images.length === 0) {
@@ -1176,13 +1183,41 @@
       } else {
           images.forEach(img => {
             let src = img.url ? img.url : 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
-            html += `<div class="admin-image-item">
+            html += `<div class="admin-image-item" data-name="${img.name}">
                        <img src="${src}" class="admin-image-img" onclick="showFullImage(event, '${src}')">
                        <div class="admin-image-delete" onclick="deleteAdminImageExecute('${img.name}')">×</div>
                      </div>`;
           });
       }
-      document.getElementById('adminImageGallery').innerHTML = html;
+      let gallery = document.getElementById('adminImageGallery');
+      gallery.innerHTML = html;
+      
+      if(images && images.length > 0) {
+          new Sortable(gallery, {
+              animation: 150,
+              delay: 300, // 長押しで掴めるようにする
+              delayOnTouchOnly: true, // タッチデバイスのみ長押し
+              onEnd: function () { saveImageOrder(); }
+          });
+      }
+    }
+
+    // ★追加：並び替えた順番を保存する処理
+    function saveImageOrder() {
+      let items = document.querySelectorAll('#adminImageGallery .admin-image-item');
+      let newOrder = Array.from(items).map(item => item.getAttribute('data-name'));
+      
+      document.getElementById('editErrorReason').style.display = 'block';
+      document.getElementById('editErrorReason').innerText = "画像を並び替え中...";
+      
+      google.script.run
+        .withFailureHandler(function(e){ alert("並び替えエラー: " + e.message); })
+        .withSuccessHandler(function(r){
+           if(r==="OK"){
+             document.getElementById('editErrorReason').innerText = "画像の並び順を保存しました！";
+             setTimeout(() => { document.getElementById('editErrorReason').style.display = 'none'; }, 2000);
+           } else { alert(r); }
+        }).reorderItemImages(currentAdminSheet, currentEditCode, newOrder);
     }
 
     async function executeBulkReplaceImages(input) {
@@ -1275,20 +1310,24 @@
       .updateItemTextData(currentAdminSheet,currentEditCode,document.getElementById('editTextTitle').value,document.getElementById('editTextDesc').value,document.getElementById('editTextDims').value,newStatus); 
     }
 
+    // ★修正：再生成の即時反映＆エラー詳細の表示
     function executeRetryAI(){ 
       if(!confirm("AI再生成しますか？\n※選択中の「商品の状態」を反映して文章を上書きします"))return; 
-      showLoading("状態を反映して再生成中..."); 
+      showLoading("AIで文章を再生成中..."); 
       let newStatus = document.getElementById('editItemStatus').value;
       google.script.run
       .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
       .withSuccessHandler(function(res){
         hideLoading();
         if(res && res.title && res.desc){
+          // 戻らなくても即座にテキストボックスの中身が切り替わる！
           document.getElementById('editTextTitle').value = res.title;
           document.getElementById('editTextDesc').value = res.desc;
-          alert("再生成が完了し、即時反映しました！"); 
+          alert("再生成が完了し、即時反映しました！\n問題なければ左下の「保存」を押してください。"); 
           loadAdminList(currentAdminSheet); 
-        } else { alert("再生成エラー: " + (res.error || "不明なエラー")); }
+        } else { 
+          alert(res.error || "不明なエラーが発生しました。"); 
+        }
       }).retryAIGeneration(currentAdminSheet, currentEditCode, newStatus); 
     }
 
@@ -1345,7 +1384,7 @@
       let targets = [];
       Object.keys(lastAdminData).forEach(function(k) {
         let d = lastAdminData[k]; if(!d) return;
-        let needsAI = (!d.title || d.title.trim() === "" || !d.desc || d.desc.trim() === "" || d.desc.includes("※AIエラー発生"));
+        let needsAI = (!d.title || d.title.trim() === "" || !d.desc || d.desc.trim() === "" || d.desc.includes("※AIエラー"));
         if(needsAI) targets.push(k);
       });
       if(targets.length === 0) { alert("生成が必要なアイテムはありません！"); return; }
