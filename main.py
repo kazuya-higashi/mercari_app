@@ -6,6 +6,7 @@ import csv
 import io
 import base64
 import requests
+import unicodedata
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -32,7 +33,76 @@ app.add_middleware(
 def read_root():
     return FileResponse("index.html")
 
-# --- AI・タイトル生成ロジック（変更なし） ---
+# ==========================================
+# 共通機能・設定管理（GASの PropertiesService の完全再現）
+# ==========================================
+def normalize_str(s):
+    return unicodedata.normalize('NFKC', str(s)).strip() if s else ""
+
+def get_batch_settings():
+    try:
+        res = supabase.table("mercari_items").select("description").eq("item_code", "SYSTEM_SETTINGS").execute()
+        if res.data and res.data[0].get("description"):
+            return json.loads(res.data[0]["description"])
+    except:
+        pass
+    return {
+        "sheetName": "シート1",
+        "prefix": "OM",
+        "start": 10000,
+        "end": 19999,
+        "suffix": "HG"
+    }
+
+def save_batch_settings(data):
+    try:
+        res = supabase.table("mercari_items").select("item_code").eq("item_code", "SYSTEM_SETTINGS").execute()
+        if res.data:
+            supabase.table("mercari_items").update({"description": json.dumps(data)}).eq("item_code", "SYSTEM_SETTINGS").execute()
+        else:
+            supabase.table("mercari_items").insert({
+                "item_code": "SYSTEM_SETTINGS", "title": "SYSTEM",
+                "description": json.dumps(data), "batch_name": "SYSTEM"
+            }).execute()
+    except:
+        pass
+
+def assign_real_code_internal(sheetName, oldCode):
+    config = get_batch_settings()
+    prefix = config.get("prefix", "OM")
+    suffix = config.get("suffix", "HG")
+    start = int(config.get("start", 10000))
+    end = int(config.get("end", 19999))
+    
+    norm_sheet = normalize_str(sheetName)
+    m = re.match(r'^([A-Za-z]+)(\d+)([A-Za-z]+)[〜～\-]+([A-Za-z]+)(\d+)([A-Za-z]+)$', norm_sheet)
+    if m:
+        prefix = m.group(1)
+        start = int(m.group(2))
+        suffix = m.group(3)
+        end = int(m.group(5))
+        
+    res = supabase.table("mercari_items").select("item_code").eq("batch_name", sheetName).execute()
+    existingNumbers = set()
+    for r in res.data:
+        c = r["item_code"]
+        if str(c).startswith(prefix) and str(c).endswith(suffix):
+            numMatch = re.search(r'\d+', str(c))
+            if numMatch:
+                existingNumbers.add(int(numMatch.group(0)))
+                
+    nextNum = -1
+    for i in range(start, end + 1):
+        if i not in existingNumbers:
+            nextNum = i
+            break
+            
+    if nextNum == -1:
+        raise Exception("設定された範囲を完全に使い切りました。")
+        
+    return f"{prefix}{nextNum}{suffix}"
+
+# --- AI・タイトル生成ロジック ---
 def analyze_image_with_gemini(base64_img: str, keywords: str):
     if not GEMINI_API_KEY: return {"intro": "※AIエラー: APIキーが設定されていません"}
     prompt = f"""メルカリShops用SEOエキスパート。画像1枚とキーワード[{keywords}]から情報を抽出しJSONで回答。性別(メンズ,レディース)やブランド名自体は不要。該当しない項目は必ず空文字""にすること。
@@ -52,8 +122,7 @@ def analyze_image_with_gemini(base64_img: str, keywords: str):
         res = requests.post(url, json=payload)
         res.raise_for_status()
         text = res.json()["candidates"][0]["content"]["parts"][0]["text"]
-        return json.loads(text.replace("
-```json", "").replace("```", "").strip())
+        return json.loads(text.replace("```json", "").replace("```", "").strip())
     except Exception as e:
         return {"intro": f"※AIエラー発生: {str(e)}"}
 
@@ -102,70 +171,79 @@ async def rpc_endpoint(req: Request):
     args = payload.get("args", [])
     
     try:
-        # ==========================================
-        # 1. サーバー側に「現在作業中のバッチ」を記憶・呼び出しする処理
-        # ==========================================
-        def get_saved_active_batch():
-            res = supabase.table("mercari_items").select("batch_name").eq("item_code", "SYSTEM_ACTIVE_BATCH").execute()
-            if res.data and res.data[0].get("batch_name"):
-                return res.data[0]["batch_name"]
-            return ""
+        # 1. バッチ作成（次の納品分を設定）
+        if method == "saveBatchSettings":
+            d = args[0]
+            save_batch_settings(d)
+            return {"data": "OK"}
 
-        def save_active_batch(batch_name):
-            supabase.table("mercari_items").upsert({
-                "item_code": "SYSTEM_ACTIVE_BATCH",
-                "batch_name": batch_name,
-                "title": "SYSTEM_DUMMY"
-            }).execute()
-
-        # ==========================================
-        # 以下、GAS関数の完全再現
-        # ==========================================
-        
-        if method == "checkBatchFull":
-            # 引数がない場合は、サーバーに記憶しているバッチを呼び出す
-            batch_name = args[0] if args and args[0] else get_saved_active_batch()
-            if not batch_name: return {"data": False}
+        # 2. 空き枠の確認（GASの正規表現と上限計算を完全再現）
+        elif method == "checkBatchFull":
+            targetSheetName = args[0] if args and args[0] else None
+            config = get_batch_settings()
+            sheetName = targetSheetName if targetSheetName else config.get("sheetName", "シート1")
             
-            # ダミーデータ（BATCH-やSYSTEM_）を除外して、純粋なアイテム数をカウントする（これでバグは起きません）
-            res = supabase.table("mercari_items").select("item_code").eq("batch_name", batch_name).execute()
-            valid_items = [r for r in res.data if not str(r["item_code"]).startswith("BATCH-") and not str(r["item_code"]).startswith("SYSTEM_")]
-            current_count = len(valid_items)
+            start = int(config.get("start", 10000))
+            end = int(config.get("end", 19999))
             
-            # バッチ名（OM100HG〜OM200HG）から上限を計算
-            m = re.match(r'^([A-Za-z]+)(\d+)([A-Za-z]+)〜([A-Za-z]+)(\d+)([A-Za-z]+)$', batch_name)
+            # いただいたGAS通り、正規表現で文字を判定（全角チルダやハイフンにも耐えるよう強化）
+            norm_sheet = normalize_str(sheetName)
+            m = re.match(r'^([A-Za-z]+)(\d+)([A-Za-z]+)[〜～\-]+([A-Za-z]+)(\d+)([A-Za-z]+)$', norm_sheet)
             if m:
                 start = int(m.group(2))
                 end = int(m.group(5))
-                max_items = end - start + 1
-                return {"data": current_count >= max_items}
-            return {"data": False}
-
-        elif method == "saveBatchSettings":
-            d = args[0]
-            batch_name = d.get("sheetName")
-            # 新しいバッチを作成したら、それを「現在作業中のバッチ」として記憶する
-            res = supabase.table("mercari_items").select("item_code").eq("item_code", f"BATCH-{batch_name}").execute()
-            if not res.data:
-                supabase.table("mercari_items").insert({
-                    "item_code": f"BATCH-{batch_name}", 
-                    "batch_name": batch_name, 
-                    "title": "BATCH_DUMMY"
-                }).execute()
-            save_active_batch(batch_name)
-            return {"data": "OK"}
-
-        elif method == "reserveNewCode":
-            code = f"TMP-{int(time.time())}"
-            return {"data": {"code": code, "displayCount": "新規", "error": None}}
+                
+            maxItems = end - start + 1
             
+            res = supabase.table("mercari_items").select("item_code").eq("batch_name", sheetName).execute()
+            valid_items = [r for r in res.data if r["item_code"] != "SYSTEM_SETTINGS" and not str(r["item_code"]).startswith("BATCH-")]
+            currentItems = len(valid_items)
+            
+            return {"data": currentItems >= maxItems}
+
+        # 3. 新規出品用の仮番号発行
+        elif method == "reserveNewCode":
+            targetSheetName = args[0] if args and args[0] else None
+            config = get_batch_settings()
+            sheetName = targetSheetName if targetSheetName else config.get("sheetName", "シート1")
+            
+            if not sheetName:
+                return {"data": {"code": None, "error": "対象のタブが存在しません。管理画面から設定してください。"}}
+                
+            start = int(config.get("start", 10000))
+            end = int(config.get("end", 19999))
+            
+            norm_sheet = normalize_str(sheetName)
+            m = re.match(r'^([A-Za-z]+)(\d+)([A-Za-z]+)[〜～\-]+([A-Za-z]+)(\d+)([A-Za-z]+)$', norm_sheet)
+            if m:
+                start = int(m.group(2))
+                end = int(m.group(5))
+                
+            maxItems = end - start + 1
+            
+            res = supabase.table("mercari_items").select("item_code").eq("batch_name", sheetName).execute()
+            valid_items = [r for r in res.data if r["item_code"] != "SYSTEM_SETTINGS" and not str(r["item_code"]).startswith("BATCH-")]
+            currentItems = len(valid_items)
+            
+            if currentItems >= maxItems:
+                return {"data": {"code": None, "error": "設定の上限数を超えているため新たに枠を作ってください"}}
+                
+            tempCode = f"TMP-{int(time.time() * 1000)}"
+            count = currentItems + 2
+            return {"data": {"code": tempCode, "displayCount": count, "error": None}}
+            
+        # 4. ブランド一覧
         elif method == "getBrandList":
             return {"data": []}
             
+        # 5. 新規出品のAI生成と保存
         elif method == "processHeavyData":
             code = args[0]
             d = args[1]
-            batch_name = args[2] if len(args) > 2 and args[2] else get_saved_active_batch()
+            targetSheetName = args[2] if len(args) > 2 and args[2] else None
+            config = get_batch_settings()
+            sheetName = targetSheetName if targetSheetName else config.get("sheetName", "シート1")
+            
             b64 = d["images"][0]["data"] if d.get("images") and d["images"][0]["data"] != "DUMMY" else ""
             
             ai_data = {}
@@ -177,8 +255,8 @@ async def rpc_endpoint(req: Request):
             
             images = [f"{code}-{i+1}.jpg" for i in range(20) if i < len(d.get("images", []))]
             
-            supabase.table("mercari_items").insert({
-                "batch_name": batch_name,
+            supabase.table("mercari_items").upsert({
+                "batch_name": sheetName,
                 "item_code": code, "brand": d.get("brand", ""), "keywords": d.get("keywords", ""),
                 "material": d.get("materialText", ""), "status_text": d.get("statusText", ""),
                 "size_input": d.get("sizeInput", ""), "category_text": d.get("categoryText", ""),
@@ -188,25 +266,30 @@ async def rpc_endpoint(req: Request):
             
             return {"data": {"code": code, "error": None}}
 
+        # 6. 未採寸リストの取得
         elif method == "getPendingMeasurements":
-            batch_name = args[0] if args and args[0] else get_saved_active_batch()
-            query = supabase.table("mercari_items").select("*")
-            if batch_name: query = query.eq("batch_name", batch_name)
+            targetSheetName = args[0] if args and args[0] else None
+            config = get_batch_settings()
+            sheetName = targetSheetName if targetSheetName else config.get("sheetName", "シート1")
+            
+            query = supabase.table("mercari_items").select("*").eq("batch_name", sheetName)
             res = query.execute()
             
             items = []
             for r in res.data:
-                if str(r.get("item_code", "")).startswith("BATCH-") or str(r.get("item_code", "")).startswith("SYSTEM_"): continue
-                if str(r.get("item_code", "")).startswith("TMP-") or "【寸法データ未入力" in r.get("description", ""):
+                c = str(r.get("item_code", ""))
+                if c == "SYSTEM_SETTINGS" or c.startswith("BATCH-"): continue
+                if c.startswith("TMP-") or "【寸法データ未入力" in str(r.get("description", "")):
                     img = r.get("images", [])
                     thumb = img[0] if img else ""
                     items.append({
-                        "code": r["item_code"], "brand": r.get("brand", ""), 
+                        "code": c, "brand": r.get("brand", ""), 
                         "thumbUrl": f"{PUBLIC_URL}/{thumb}" if thumb else "", 
                         "categoryText": r.get("category_text", "")
                     })
             return {"data": items}
             
+        # 7. 採寸データの保存
         elif method == "saveMeasurement":
             code = args[0]
             dims = args[1]
@@ -236,27 +319,36 @@ async def rpc_endpoint(req: Request):
             supabase.table("mercari_items").update({"description": new_desc}).eq("item_code", code).execute()
             return {"data": "OK"}
             
+        # 8. 未梱包リストの取得
         elif method == "getPendingPackings":
-            batch_name = args[0] if args and args[0] else get_saved_active_batch()
-            query = supabase.table("mercari_items").select("*").neq("pack_status", "梱包完了")
-            if batch_name: query = query.eq("batch_name", batch_name)
+            targetSheetName = args[0] if args and args[0] else None
+            config = get_batch_settings()
+            sheetName = targetSheetName if targetSheetName else config.get("sheetName", "シート1")
+            
+            query = supabase.table("mercari_items").select("*").eq("batch_name", sheetName).neq("pack_status", "梱包完了")
             res = query.execute()
             
             items = []
             for r in res.data:
-                if str(r.get("item_code", "")).startswith("BATCH-") or str(r.get("item_code", "")).startswith("SYSTEM_"): continue
-                if not str(r.get("item_code", "")).startswith("TMP-") and "【寸法データ未入力" not in r.get("description", ""):
+                c = str(r.get("item_code", ""))
+                if c == "SYSTEM_SETTINGS" or c.startswith("BATCH-"): continue
+                if not c.startswith("TMP-") and "【寸法データ未入力" not in str(r.get("description", "")):
                     img = r.get("images", [])
                     thumb = img[0] if img else ""
                     items.append({
-                        "code": r["item_code"], "brand": r.get("brand", ""), 
+                        "code": c, "brand": r.get("brand", ""), 
                         "thumbUrl": f"{PUBLIC_URL}/{thumb}" if thumb else "", 
                         "categoryText": r.get("category_text", "")
                     })
             return {"data": items}
             
+        # 9. 梱包画像の保存とOM番号の正式付与
         elif method == "savePackingPhotoAndAssignCode":
             code = args[0]
+            targetSheetName = args[2] if len(args) > 2 and args[2] else None
+            config = get_batch_settings()
+            sheetName = targetSheetName if targetSheetName else config.get("sheetName", "シート1")
+            
             res = supabase.table("mercari_items").select("*").eq("item_code", code).execute()
             if not res.data: raise Exception("アイテムが見つかりません")
             target = res.data[0]
@@ -265,14 +357,11 @@ async def rpc_endpoint(req: Request):
             is_new = False
             
             if code.startswith("TMP-"):
-                all_om = supabase.table("mercari_items").select("item_code").like("item_code", "OM%HG").execute()
-                nums = [int(re.search(r'\d+', c["item_code"]).group()) for c in all_om.data if re.search(r'\d+', c["item_code"])]
-                next_num = max(nums) + 1 if nums else 10000
-                final_code = f"OM{next_num}HG"
+                final_code = assign_real_code_internal(sheetName, code)
                 is_new = True
                 
-                new_title = target.get("title", "").replace(code, final_code)
-                new_images = [img.replace(code, final_code) if type(img)==str else img for img in target.get("images", [])]
+                new_title = str(target.get("title", "")).replace(code, final_code)
+                new_images = [str(img).replace(code, final_code) for img in target.get("images", [])]
                 
                 supabase.table("mercari_items").update({
                     "item_code": final_code, "title": new_title, "images": new_images, "pack_status": "梱包完了"
@@ -282,43 +371,65 @@ async def rpc_endpoint(req: Request):
             
             return {"data": {"status": "OK", "finalCode": final_code, "isNewlyAssigned": is_new}}
 
+        # 10. ダッシュボード管理データの取得（GAS完全互換、勝手にバッチが変わらないように）
         elif method == "getAdminData":
-            # 引数(target)が空の場合は、サーバーの記憶(最後に開いたバッチ)を呼び出す！
-            req_batch = args[0] if args and args[0] else get_saved_active_batch()
-            
-            # 全バッチ名の取得
+            targetSheetName = args[0] if args and args[0] else None
+            config = get_batch_settings()
+            activeSheetName = config.get("sheetName", "シート1")
+            sheetNameToLoad = targetSheetName if targetSheetName else activeSheetName
+
             res_all = supabase.table("mercari_items").select("batch_name").execute()
-            all_batches = sorted(list(set([r["batch_name"] for r in res_all.data if r.get("batch_name") and not str(r["batch_name"]).startswith("SYSTEM_")])))
-            if not all_batches:
-                all_batches = ["デフォルトバッチ"]
+            seen = set()
+            allSheets = []
+            for r in res_all.data:
+                b = str(r.get("batch_name", ""))
+                if b and b != "SYSTEM" and b not in seen:
+                    seen.add(b)
+                    allSheets.append(b)
+            
+            if activeSheetName and activeSheetName not in seen:
+                allSheets.append(activeSheetName)
                 
-            active_batch = req_batch if req_batch in all_batches else all_batches[-1]
+            allSheets = sorted(allSheets)
+
+            res = supabase.table("mercari_items").select("*").eq("batch_name", sheetNameToLoad).order("created_at").execute()
             
-            # 記憶を確実に最新に更新する
-            save_active_batch(active_batch)
-            
-            res = supabase.table("mercari_items").select("*").eq("batch_name", active_batch).order("created_at").execute()
-            
-            item_map = {}
-            for r in res.data:
-                c = r["item_code"]
-                if str(c).startswith("BATCH-") or str(c).startswith("SYSTEM_"): continue
+            itemMap = {}
+            for i, r in enumerate(res.data):
+                code = str(r["item_code"])
+                if code == "SYSTEM_SETTINGS" or code.startswith("BATCH-"): continue
+                
                 img = r.get("images", [])
-                thumb = img[0] if img and isinstance(img, list) else ""
-                item_map[c] = {
-                    "count": 1, "row": 0, "status": "出品完了", "dims": "測定済" if "【実寸" in r.get("description", "") else "",
-                    "brand": r.get("brand", ""), "statusText": r.get("status_text", ""),
-                    "title": r.get("title", ""), "desc": r.get("description", ""),
-                    "thumbUrl": f"{PUBLIC_URL}/{thumb}" if thumb else "",
+                thumbName = img[0] if img and isinstance(img, list) and len(img) > 0 else ""
+                desc = str(r.get("description", ""))
+                
+                # GAS時代と同様、実寸が入っているか未入力文字がないかで採寸済を判定
+                dims_status = "測定済" if "【実寸" in desc or "【寸法データ未入力" not in desc else ""
+                
+                itemMap[code] = {
+                    "count": 1, "row": i + 2, "status": "出品完了", "dims": dims_status,
+                    "brand": r.get("brand", "") or "ブランド不明", "statusText": r.get("status_text", ""),
+                    "title": r.get("title", ""), "desc": desc,
+                    "thumbUrl": f"{PUBLIC_URL}/{thumbName}" if thumbName else "",
                     "packStatus": r.get("pack_status", ""), "shipStatus": "",
                     "missingImages": [], "hasMissingImage": False
                 }
-            return {"data": {"config": {"sheetName": active_batch}, "itemMap": item_map, "allSheets": all_batches, "currentViewSheet": active_batch}}
+                
+            return {"data": {
+                "config": config,
+                "itemMap": itemMap,
+                "allSheets": allSheets,
+                "activeSheet": activeSheetName,
+                "currentViewSheet": sheetNameToLoad
+            }}
 
+        # 11. CSV＆ZIP一括ダウンロード用データの構築
         elif method == "getBatchDownloadData":
-            batch_name = args[0] if args and args[0] else get_saved_active_batch()
-            query = supabase.table("mercari_items").select("*")
-            if batch_name: query = query.eq("batch_name", batch_name)
+            targetSheetName = args[0] if args and args[0] else None
+            config = get_batch_settings()
+            sheetName = targetSheetName if targetSheetName else config.get("sheetName", "シート1")
+            
+            query = supabase.table("mercari_items").select("*").eq("batch_name", sheetName)
             res = query.execute()
             
             output = io.StringIO()
@@ -327,35 +438,39 @@ async def rpc_endpoint(req: Request):
             
             images_to_download = []
             for r in res.data:
-                if str(r.get("item_code", "")).startswith("TMP-") or str(r.get("item_code", "")).startswith("BATCH-") or str(r.get("item_code", "")).startswith("SYSTEM_"): continue
+                c = str(r.get("item_code", ""))
+                if c.startswith("TMP-") or c == "SYSTEM_SETTINGS" or c.startswith("BATCH-"): continue
                 
                 imgs = r.get("images", [])
                 row_imgs = [imgs[i] if i < len(imgs) else "" for i in range(20)]
                 for img in imgs:
-                    if img: images_to_download.append(img)
+                    if img: images_to_download.append(str(img).strip())
                 
                 status_map = { "新品、未使用": "1", "未使用に近い": "2", "目立った傷や汚れなし": "3", "やや傷や汚れあり": "4", "傷や汚れあり": "5", "全体的に状態が悪い": "6" }
-                status_id = status_map.get(r.get("status_text", ""), "3")
+                status_id = status_map.get(str(r.get("status_text", "")), "3")
                 
                 row_data = row_imgs + [
-                    r.get("title", ""), r.get("description", ""), r.get("size_input", "").strip(), "1",
-                    r.get("item_code", ""), "", r.get("brand_id", ""), "5999", r.get("category_id", ""),
+                    str(r.get("title", "")), str(r.get("description", "")), str(r.get("size_input", "")).strip(), "1",
+                    c, "", str(r.get("brand_id", "")), "5999", str(r.get("category_id", "")),
                     status_id, "1", "jp07", "1", "1"
                 ]
                 writer.writerow(row_data)
                 
             return {"data": {"csvString": output.getvalue(), "images": images_to_download}}
 
+        # 12. 画像一覧の取得
         elif method == "getItemImagesForAdmin":
             code = args[1]
             res = supabase.table("mercari_items").select("images").eq("item_code", code).execute()
             images = []
             if res.data:
                 for img in res.data[0].get("images", []):
-                    images.append({"name": img, "url": f"{PUBLIC_URL}/{img}"})
+                    if img: images.append({"name": str(img), "url": f"{PUBLIC_URL}/{img}"})
             return {"data": {"images": images}}
 
+        # 13. 管理画面からの画像削除（バグ修正済）
         elif method == "deleteAdminImage":
+            sheetName = args[0]
             code = args[1]
             imgName = args[2]
             res = supabase.table("mercari_items").select("images").eq("item_code", code).execute()
@@ -366,7 +481,9 @@ async def rpc_endpoint(req: Request):
                     supabase.table("mercari_items").update({"images": imgs}).eq("item_code", code).execute()
             return {"data": "OK"}
 
+        # 14. 画像の追加（バグ修正済）
         elif method == "addAdminImages":
+            sheetName = args[0]
             code = args[1]
             b64_list = args[2]
             res = supabase.table("mercari_items").select("images").eq("item_code", code).execute()
@@ -378,20 +495,24 @@ async def rpc_endpoint(req: Request):
                 supabase.table("mercari_items").update({"images": imgs}).eq("item_code", code).execute()
             return {"data": "OK"}
 
+        # 15. 画像の一括入れ替え（バグ修正済）
         elif method == "replaceItemImages":
-            code = args[1]
+            sheetName = args[0]
+            itemCode = args[1]
             b64_list = args[2]
-            new_imgs = [f"{code}-{i+1}.jpg" for i in range(len(b64_list))]
-            supabase.table("mercari_items").update({"images": new_imgs}).eq("item_code", code).execute()
+            new_imgs = [f"{itemCode}-{i+1}.jpg" for i in range(len(b64_list))]
+            supabase.table("mercari_items").update({"images": new_imgs}).eq("item_code", itemCode).execute()
             return {"data": "OK"}
 
+        # 16. テキストデータの更新
         elif method == "updateItemTextData":
             code = args[1]
             supabase.table("mercari_items").update({
-                "title": args[2], "description": args[3], "status_text": args[5]
+                "title": str(args[2]), "description": str(args[3]), "status_text": str(args[5])
             }).eq("item_code", code).execute()
             return {"data": "OK"}
             
+        # 17. AI再生成
         elif method == "retryAIGeneration":
             code = args[1]
             new_status = args[2]
@@ -399,16 +520,16 @@ async def rpc_endpoint(req: Request):
             if res.data:
                 item = res.data[0]
                 imgs = item.get("images", [])
-                if imgs:
+                if imgs and imgs[0]:
                     img_url = f"{PUBLIC_URL}/{imgs[0]}"
                     try:
                         img_res = requests.get(img_url)
                         b64 = base64.b64encode(img_res.content).decode('utf-8')
-                        ai_data = analyze_image_with_gemini(b64, item.get("keywords", ""))
-                        gender = "メンズ" if "メンズ" in item.get("category_text", "") else "レディース" if "レディース" in item.get("category_text", "") else ""
-                        status_to_use = new_status if new_status else item.get("status_text", "")
+                        ai_data = analyze_image_with_gemini(b64, str(item.get("keywords", "")))
+                        gender = "メンズ" if "メンズ" in str(item.get("category_text", "")) else "レディース" if "レディース" in str(item.get("category_text", "")) else ""
+                        status_to_use = new_status if new_status else str(item.get("status_text", ""))
                         title = build_title(item, ai_data, gender, code)
-                        desc = build_description(ai_data.get("intro", ""), status_to_use, item.get("size_input", ""))
+                        desc = build_description(ai_data.get("intro", ""), status_to_use, str(item.get("size_input", "")))
                         supabase.table("mercari_items").update({
                             "title": title, "description": desc, "status_text": status_to_use
                         }).eq("item_code", code).execute()
@@ -416,24 +537,27 @@ async def rpc_endpoint(req: Request):
                         pass
             return {"data": "OK"}
 
+        # 18. 管理番号の強制修正
         elif method == "fixManagementCode":
             old_code = args[1]
             new_code = args[2]
             res = supabase.table("mercari_items").select("*").eq("item_code", old_code).execute()
             if res.data:
                 item = res.data[0]
-                new_title = item.get("title", "").replace(old_code, new_code)
-                new_images = [img.replace(old_code, new_code) for img in item.get("images", [])]
+                new_title = str(item.get("title", "")).replace(old_code, new_code)
+                new_images = [str(img).replace(old_code, new_code) for img in item.get("images", [])]
                 supabase.table("mercari_items").update({
                     "item_code": new_code, "title": new_title, "images": new_images
                 }).eq("item_code", old_code).execute()
             return {"data": "OK"}
 
+        # 19. 梱包状態を未梱包に戻す
         elif method == "revertPackingStatus":
             code = args[1]
             supabase.table("mercari_items").update({"pack_status": ""}).eq("item_code", code).execute()
             return {"data": "OK"}
 
+        # 20. アイテムのバッチ移動
         elif method == "moveItemsToBatch":
             target_batch = args[1]
             codes = args[2]
@@ -441,9 +565,11 @@ async def rpc_endpoint(req: Request):
                 supabase.table("mercari_items").update({"batch_name": target_batch}).eq("item_code", c).execute()
             return {"data": "OK"}
 
+        # 21. インセンティブ集計（今回はUI連携のみ）
         elif method == "fetchIncentiveData":
             return {"data": []}
 
+        # 22. アイテムの削除
         elif method == "deleteItemData":
             code = args[1]
             supabase.table("mercari_items").delete().eq("item_code", code).execute()
