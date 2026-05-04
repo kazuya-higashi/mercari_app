@@ -10,16 +10,15 @@ import unicodedata
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
-
 from supabase import create_client, Client
 
 # --- 環境設定 ---
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyA3oxQCe8OAiU571mhSWr6FZuE26rVxZ74")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 PUBLIC_URL = "https://pub-8e4386156d26427f861486afe0381fb4.r2.dev"
 
-# ★GASからブランドマスタを引っ張ってくるための設定
+# ★ご自身のデプロイしたURLに書き換えてください
 SPREADSHEET_ID = '1kpKObKqse7sfcG_VByhF1uWeMRTdFYPAu4VS0eqh6PU'
 GAS_API_URL = "https://script.google.com/macros/s/AKfycbwX3CsxVEfZ1OUa5ytPkBmsElpihy6hKrm_vzW_KOlyX25Xim6jLNmW3fEflUF16B37/exec"
 
@@ -34,7 +33,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ★【最重要】ブラウザの古いキャッシュを強制的に破棄させる処理
+# ★ブラウザの古いキャッシュを強制的に破棄させる処理
 @app.get("/")
 def read_root():
     with open("index.html", "r", encoding="utf-8") as f:
@@ -116,7 +115,7 @@ def assign_real_code_internal(sheetName, oldCode):
 
 # --- AI・タイトル生成ロジック ---
 def analyze_image_with_gemini(base64_img: str, keywords: str):
-    if not GEMINI_API_KEY: return {"intro": "※AIエラー: APIキーが設定されていません"}
+    if not GEMINI_API_KEY: return {"intro": "※AIエラー: RenderのEnvironment変数にAPIキーが設定されていません。"}
     prompt = f"""メルカリShops用SEOエキスパート。画像1枚とキーワード[{keywords}]から情報を抽出しJSONで回答。性別(メンズ,レディース)やブランド名自体は不要。該当しない項目は必ず空文字""にすること。
 【絶対ルール】
 ・画像から確実に読み取れない情報は絶対に記述しないこと。
@@ -128,12 +127,16 @@ def analyze_image_with_gemini(base64_img: str, keywords: str):
 
 {{"colors":"カラー カタカナ 漢字","shape":"特徴","pattern":"柄","printedText":"英字","synonyms":"カテゴリーの別称や略称(1つのみ)","season":"季節","scene":"シーン(例: アウトドア カジュアル)","intro":"150〜200文字程度の簡潔で自然なアパレル商品紹介文","type":"tops/bottoms","extraKeywords":"関連検索語をスペース区切りで"}}"""
     
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     payload = {"contents": [{"parts": [{"text": prompt}, {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}]}]}
     try:
         res = requests.post(url, json=payload, timeout=60)
+        
+        if res.status_code == 403:
+            return {"intro": "※AI通信エラー(403): APIキーが無効、または停止されています。新しいキーを設定してください。"}
         if res.status_code != 200:
             return {"intro": f"※AI通信エラー({res.status_code}): {res.text[:100]}"}
+            
         data = res.json()
         if "candidates" not in data or not data["candidates"]:
             return {"intro": f"※AIブロック: {json.dumps(data.get('promptFeedback', '画像が不適切と判定された可能性があります'))}"}
@@ -196,10 +199,19 @@ async def rpc_endpoint(req: Request):
     args = payload.get("args", [])
     
     try:
-        # 1. バッチ作成
+        # 1. ★修正：バッチ作成時にGASへ通信してドライブにフォルダを作る
         if method == "saveBatchSettings":
             d = args[0]
             save_batch_settings(d)
+            
+            # GASへ「フォルダ作って！」と命令を送る
+            sheetName = d.get("sheetName")
+            try:
+                gas_payload = {"method": "setupNewBatch", "sheetName": sheetName}
+                requests.post(GAS_API_URL, json=gas_payload, timeout=10)
+            except Exception as e:
+                print(f"GAS folder creation error: {e}")
+                
             return {"data": "OK"}
 
         # 2. 空き枠の確認
@@ -548,7 +560,7 @@ async def rpc_endpoint(req: Request):
             }).eq("item_code", code).execute()
             return {"data": "OK"}
             
-        # 17. AI再生成（即時反映とエラー通知の実装）
+        # 17. AI再生成（エラー通知と即時反映）
         elif method == "retryAIGeneration":
             code = args[1]
             new_status = args[2]
@@ -560,12 +572,15 @@ async def rpc_endpoint(req: Request):
                     img_url = f"{PUBLIC_URL}/{imgs[0]}"
                     try:
                         img_res = requests.get(img_url, timeout=15)
+                        if img_res.status_code == 404:
+                            return {"error": "画像がサーバーに見つかりません(404)。\nお手数ですが「🔄全入替」から画像を再登録してください。"}
                         img_res.raise_for_status()
+                        
                         b64 = base64.b64encode(img_res.content).decode('utf-8')
                         ai_data = analyze_image_with_gemini(b64, str(item.get("keywords", "")))
                         
-                        if "※AI" in str(ai_data.get("intro", "")):
-                            return {"error": f"AI生成自体は完了しましたがエラーが含まれます: {ai_data.get('intro')}"}
+                        if "※AIエラー" in str(ai_data.get("intro", "")) or "※AI通信エラー" in str(ai_data.get("intro", "")):
+                            return {"error": f"AIの処理中にエラーが発生しました。\n{ai_data.get('intro')}"}
                         
                         gender = "メンズ" if "メンズ" in str(item.get("category_text", "")) else "レディース" if "レディース" in str(item.get("category_text", "")) else ""
                         status_to_use = new_status if new_status else str(item.get("status_text", ""))
@@ -578,7 +593,7 @@ async def rpc_endpoint(req: Request):
                         
                         return {"data": {"title": title, "desc": desc}}
                     except Exception as e:
-                        return {"error": f"画像取得またはAI生成エラー: {str(e)}"}
+                        return {"error": f"画像の取得、またはAIとの通信に失敗しました。\n詳細: {str(e)}"}
                 else:
                     return {"error": "アイテムに画像が登録されていないため再生成できません。"}
             return {"error": "対象のアイテムがデータベースに見つかりません。"}
