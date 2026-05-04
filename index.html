@@ -11,6 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&display=swap" rel="stylesheet">
   
+  <!-- S3/R2アップロード用にAWS SDKを復活 -->
   <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1438.0.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
@@ -50,15 +51,15 @@
     #screen-measure .mode-title{color:#008B99;} #screen-measure .nav-bar-border{border-bottom:1px solid #00E5FF; margin-bottom: 15px;} #screen-measure .back-btn{background:#00E5FF;border-color:#111;}
     #screen-pack .mode-title{color:#B38F00;} #screen-pack .nav-bar{border-color:#FFDE59;} #screen-pack .back-btn{background:#FFDE59;border-color:#111;}
     #screen-admin .mode-title{color:#6A35FF;} #screen-admin .nav-bar{border-color:#B28DFF;} #screen-admin .back-btn{background:#B28DFF;border-color:#111;}
-    .back-btn{padding:8px 16px;border-radius:8px;font-weight:normal;font-size:13px;cursor:pointer;transition:0.1s;border:1px solid transparent;color:#111;}
+    .back-btn{padding:8px 16px;border-radius:8px;font-weight:normal;font-size:13px;cursor:pointer;border:1px solid transparent;color:#111;}
     .back-btn:active{opacity: 0.7;}
     
     .question-block{margin-top:10px;position:relative;}
     label.title{font-weight:normal;font-size:14px;display:block;margin-bottom:4px;}
     .required{color:#d32f2f;font-size:12px;margin-left:3px;}
     
-    /* ★ピクつき防止：transitionを削除し、サイズを完全固定化 */
-    input[type="text"],input[type="number"],input[type="date"],select,input[type="file"],textarea{width:100%;padding:8px 10px;background:#f9f9f9;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;font-size:16px;margin-bottom:4px;-webkit-appearance:none; height:auto; line-height:normal;}
+    /* ピクつき防止：transitionを削除し、サイズを完全固定化 */
+    input[type="text"],input[type="number"],input[type="date"],select,input[type="file"],textarea{width:100%;padding:8px 10px;background:#f9f9f9;border:1px solid #ddd;border-radius:6px;font-size:16px;margin-bottom:4px;-webkit-appearance:none; height:auto; line-height:normal;}
     input:focus,select:focus,textarea:focus{background:#fff;border-color:#111;outline:none;}
     .is-filled{background:#fafafa!important;border-color:#999!important;}
     
@@ -68,13 +69,13 @@
     .radio-group input[type="radio"]:checked + span{font-weight:normal;color:#fff;}
     .radio-group label:has(input:checked){background:#111;border-color:#111;color:#fff;}
     
-    button.submit-btn{font-family:'Dela Gothic One',sans-serif; width:100%;padding:10px;margin-top:15px;background:#111;color:#fff;border:1px solid #111;border-radius:8px;font-size:16px;font-weight:normal;cursor:pointer;transition:0.1s;}
+    button.submit-btn{font-family:'Dela Gothic One',sans-serif; width:100%;padding:10px;margin-top:15px;background:#111;color:#fff;border:1px solid #111;border-radius:8px;font-size:16px;font-weight:normal;cursor:pointer;}
     button.submit-btn:active{opacity: 0.7;}
-    button.submit-btn:disabled{background:#ddd;border-color:#ddd;color:#888;transform:none;}
+    button.submit-btn:disabled{background:#ddd;border-color:#ddd;color:#888;}
     
     .camera-wrapper { width: 100%; aspect-ratio: 1 / 1; background: #000; border-radius: 12px; overflow: hidden; position: relative; margin-bottom: 10px; border: 1px solid #ccc; }
     #camera-stream { width: 100%; height: 100%; object-fit: cover; }
-    .shutter-btn { width: 64px; height: 64px; border-radius: 50%; background: #FF90E8; border: 4px solid #fff; outline: 3px solid #111; cursor: pointer; margin: 0 auto 5px auto; transition: 0.1s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .shutter-btn { width: 64px; height: 64px; border-radius: 50%; background: #FF90E8; border: 4px solid #fff; outline: 3px solid #111; cursor: pointer; margin: 0 auto 5px auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
     .shutter-btn:active { transform: scale(0.9); background: #d53f8c; }
     .preview-list { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; min-height: 70px; }
     .preview-item { position: relative; flex-shrink: 0; cursor: grab; }
@@ -88,10 +89,10 @@
     
     .modal-code-text{font-size:32px;font-weight:normal;margin:15px 0;letter-spacing:2px;background:#fff;padding:15px;border-radius:12px;border:1px dashed #111;}
     
-    .modal-btn{font-family:'Dela Gothic One',sans-serif; background:#111;color:#fff;border:1px solid #111;padding:14px 30px;border-radius:10px;font-weight:normal;cursor:pointer;width:100%;margin-top:10px;transition:0.1s;}
+    .modal-btn{font-family:'Dela Gothic One',sans-serif; background:#111;color:#fff;border:1px solid #111;padding:14px 30px;border-radius:10px;font-weight:normal;cursor:pointer;width:100%;margin-top:10px;}
     .modal-btn:active,.modal-btn-sub:active{opacity: 0.7;}
     .modal-btn-cancel{background:#f0f0f0;color:#333;border:1px solid #ddd;padding:14px 30px;border-radius:10px;font-weight:normal;cursor:pointer;width:100%;margin-top:10px;}
-    .modal-btn-sub{font-family:'Dela Gothic One',sans-serif; background:#fff;color:#111;border:1px solid #111;padding:12px;border-radius:10px;font-size:13px;font-weight:normal;cursor:pointer;width:100%;margin-top:10px;transition:0.1s;}
+    .modal-btn-sub{font-family:'Dela Gothic One',sans-serif; background:#fff;color:#111;border:1px solid #111;padding:12px;border-radius:10px;font-size:13px;font-weight:normal;cursor:pointer;width:100%;margin-top:10px;}
     .modal-btn-danger{background:#fff;color:#d32f2f;border:1px solid #d32f2f;padding:12px;border-radius:10px;font-size:13px;font-weight:normal;cursor:pointer;width:100%;margin-top:10px;}
     
     .admin-sheet-tabs{display:flex;overflow-x:auto;gap:8px;padding-bottom:12px;margin-bottom:15px;border-bottom:1px solid #eaeaea;white-space:nowrap;}
@@ -101,7 +102,7 @@
     .admin-header{background:#fff;padding:6px 10px;border-radius:10px;margin-bottom:15px;text-align:center;border:1px solid #111;}
     .batch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(95px,1fr));gap:6px;margin-top:10px;}
     
-    .batch-item{position:relative; padding:0;border-radius:6px;border:1px solid #ddd;display:flex;align-items:center;justify-content:flex-start;transition:0.1s;height:32px;box-sizing:border-box;overflow:hidden;cursor:pointer;}
+    .batch-item{position:relative; padding:0;border-radius:6px;border:1px solid #ddd;display:flex;align-items:center;justify-content:flex-start;height:32px;box-sizing:border-box;overflow:hidden;cursor:pointer;}
     .item-empty{background:#fafafa;color:#aaa;border-style:dashed;cursor:default;padding-left:10px;}
     .item-active{background:#FF90E8;color:#111;}
     .item-measured{background:#00E5FF;color:#111;}
@@ -139,7 +140,7 @@
     .mini-spinner{display:inline-block;width:10px;height:10px;border:2px solid #555;border-top:2px solid #fff;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;margin-right:6px;}
 
     .admin-image-gallery { display:flex; gap:8px; overflow-x:auto; padding:4px 0 10px 0; }
-    .admin-image-item { position:relative; flex-shrink:0; cursor:grab; transition: opacity 0.2s; }
+    .admin-image-item { position:relative; flex-shrink:0; cursor:grab;}
     .admin-image-item:active { cursor:grabbing; }
     .admin-image-img { width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid #ddd; }
     .admin-image-delete { position:absolute; top:-6px; right:-6px; background:#d32f2f; color:#fff; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:normal; cursor:pointer; z-index:10; }
@@ -474,6 +475,37 @@
     let lastAdminData = null; 
     let activeBatchSheet = localStorage.getItem('activeBatchSheet') || "";
 
+    // ★重要: API（FastAPI）のURLを定義（ご自身の環境のURLに書き換えてください）
+    // 現在のコードは「同一ドメインで動いている」前提（/api/rpc）で書かれています
+    const API_ENDPOINT = '/api/rpc';
+
+    // ----------------------------------------------------
+    // GASの google.script.run の代わりになる汎用通信関数
+    // ----------------------------------------------------
+    async function rpcCall(methodName, ...args) {
+      try {
+        const response = await fetch(API_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ method: methodName, args: args })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.error) {
+          throw new Error(result.error);
+        }
+        
+        return result.data;
+      } catch (err) {
+        throw err;
+      }
+    }
+
     window.onerror = function(msg, url, line, col, error) {
         let errDiv = document.createElement("div");
         errDiv.style = "background:red; color:white; padding:10px; position:fixed; top:0; left:0; right:0; z-index:9999;";
@@ -562,11 +594,10 @@
       if (id !== 'screen-new') stopCamera(); 
     }
     
-    function checkAndGoNew() {
+    async function checkAndGoNew() {
       showLoading("空き枠を確認中...");
-      google.script.run
-      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
-      .withSuccessHandler(function(isFull){
+      try {
+        const isFull = await rpcCall('checkBatchFull', activeBatchSheet);
         hideLoading();
         if(isFull) {
           alert("設定の上限数を超えているため、ダッシュボードから新たに枠を作ってください。");
@@ -574,7 +605,10 @@
           switchScreen('screen-new');
           initCamera(); 
         }
-      }).checkBatchFull(activeBatchSheet);
+      } catch (e) {
+        hideLoading(); 
+        alert("通信エラー: " + e.message);
+      }
     }
 
     function showLoading(t) { document.getElementById('loadingText').innerText = t; document.getElementById('loadingOverlay').style.display = 'flex'; }
@@ -587,7 +621,7 @@
       document.getElementById('imagePreviewModal').style.display = 'flex';
     }
 
-    // ★重要修正: inputへの自動フォーカス(el.focus())を全削除し、スマホでの画面の跳ね（ピクつき）を防止します
+    // テンキー動作（スマホでのピクつきを防止するためfocus削除）
     function insertAtCursor(val) {
         let el = document.getElementById('numpadInput'); let start = el.selectionStart; let end = el.selectionEnd; let text = el.value;
         el.value = text.substring(0, start) + val + text.substring(end);
@@ -601,7 +635,7 @@
         else if (start !== end) { el.value = text.substring(0, start) + text.substring(end); el.setSelectionRange(start, start); }
     }
 
-    document.addEventListener('DOMContentLoaded', function() { 
+    document.addEventListener('DOMContentLoaded', async function() { 
       let savedBatch = localStorage.getItem('activeBatchSheet');
       if (savedBatch === "DB") {
           savedBatch = null;
@@ -612,14 +646,15 @@
           activeBatchSheet = savedBatch;
       }
       
-      google.script.run
-      .withFailureHandler(function(e){ console.error(e); })
-      .withSuccessHandler(function(res) {
+      try {
+        const res = await rpcCall('getAdminData', activeBatchSheet);
         if(res && res.config && !savedBatch) {
           activeBatchSheet = res.config.sheetName;
           localStorage.setItem('activeBatchSheet', activeBatchSheet);
         }
-      }).getAdminData(activeBatchSheet);
+      } catch (e) {
+        console.error(e);
+      }
     });
 
     let isUploadingBackground=false;
@@ -694,14 +729,14 @@
       if(capturedBlobs.length === 0 || !b || !sz || !cId){alert("必須項目が未入力、または写真がありません");return;}
       
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      showLoading("Googleドライブ経由で通信準備中...");
+      showLoading("サーバー経由で通信準備中...");
 
-      google.script.run
-      .withFailureHandler(function(e){hideLoading();alert("エラー:"+e.message);})
-      .withSuccessHandler(async function(res){
-        if(res.error){hideLoading();alert(res.error);return;}
+      try {
+        const res = await rpcCall('reserveNewCode', activeBatchSheet);
+        
         let targetCode = res.code; 
 
+        // 全ての画像をBase64文字列化
         let base64Images = await Promise.all(capturedBlobs.map(async (item) => {
             return new Promise((resolve) => {
                 const reader = new FileReader();
@@ -722,10 +757,14 @@
         hideLoading(); 
         document.getElementById('assignedCodeDisplay').innerText = res.displayCount + "点目"; 
         document.getElementById('assignedCodeModal').style.display='flex';
-      }).reserveNewCode(activeBatchSheet);
+        
+      } catch (e) {
+        hideLoading();
+        alert("エラー:"+e.message);
+      }
     }
     
-    function closeAssignedCodeModal(){
+    async function closeAssignedCodeModal(){
       isUploadingBackground=true; 
       document.getElementById('assignedCodeModal').style.display='none'; 
       document.getElementById('form-new').reset(); 
@@ -741,17 +780,24 @@
       if(countDisp) countDisp.innerText = 0;
       renderPreviews();
 
-      google.script.run.withFailureHandler(function(e){ 
-          isUploadingBackground=false; document.getElementById('submitNewBtn').disabled=false; document.getElementById('submitNewBtn').innerText="送信する"; document.getElementById('bg-status-badge').style.display="none";
-          alert("通信エラーが発生しました。\n詳細: " + (e.message || "タイムアウト")); 
-      }).withSuccessHandler(function(res){ 
-          isUploadingBackground=false; pendingUploadData=null; document.getElementById('submitNewBtn').disabled=false; document.getElementById('submitNewBtn').innerText="送信する"; document.getElementById('bg-status-badge').style.display="none"; 
-          if(res && res.error && !res.error.includes("一部の画像")) alert(res.error); 
-      }).processHeavyData(pendingUploadData.code,pendingUploadData, activeBatchSheet);
+      try {
+        const res = await rpcCall('processHeavyData', pendingUploadData.code, pendingUploadData, activeBatchSheet);
+        isUploadingBackground=false; pendingUploadData=null; 
+        document.getElementById('submitNewBtn').disabled=false; 
+        document.getElementById('submitNewBtn').innerText="送信する"; 
+        document.getElementById('bg-status-badge').style.display="none"; 
+        if(res && res.error && !res.error.includes("一部の画像")) alert(res.error); 
+      } catch (e) {
+        isUploadingBackground=false; 
+        document.getElementById('submitNewBtn').disabled=false; 
+        document.getElementById('submitNewBtn').innerText="送信する"; 
+        document.getElementById('bg-status-badge').style.display="none";
+        alert("通信エラーが発生しました。\n詳細: " + (e.message || "タイムアウト")); 
+      }
     }
 
     let currentMeasureCode=null; let pendingMeasurementsData=[]; 
-    
+
     function populateMeasureFilter() {
         let cats = new Set();
         pendingMeasurementsData.forEach(function(i) {
@@ -780,16 +826,17 @@
         }).join('');
     }
 
-    function loadPendingMeasurements(){
+    async function loadPendingMeasurements(){
       showLoading("読込中..."); 
-      google.script.run
-      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
-      .withSuccessHandler(function(list){ 
+      try {
+        const list = await rpcCall('getPendingMeasurements', activeBatchSheet);
         hideLoading(); pendingMeasurementsData=list;
         document.getElementById('measure-count-badge').innerText=list.length+"件";
         if(!list.length){document.getElementById('measure-list').innerHTML='<div class="empty-state">ありません</div>';return;}
         populateMeasureFilter(); renderMeasureList();
-      }).getPendingMeasurements(activeBatchSheet);
+      } catch (e) {
+        hideLoading(); alert("通信エラー: " + e.message);
+      }
     }
 
     function updateNumpadInstruction() {
@@ -817,17 +864,18 @@
     
     function closeNumpad(){document.getElementById('customNumpad').style.display='none';}
     
-    function submitMeasurement(){ 
+    async function submitMeasurement(){ 
       let el = document.getElementById('numpadInput'); let d = el.value.trim(); 
       if(!d||!confirm(`確定しますか？ [${d}]`))return; 
       let isRaglan = document.getElementById('raglanCheck').checked; if (isRaglan) d = "R " + d;
       showLoading("送信中..."); 
-      google.script.run
-      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
-      .withSuccessHandler(function(r){
+      try {
+        const r = await rpcCall('saveMeasurement', currentMeasureCode, d, activeBatchSheet);
         hideLoading();
         if(r==="OK"){ document.getElementById('customNumpad').style.display='none'; loadPendingMeasurements(); } else alert("エラー: " + r);
-      }).saveMeasurement(currentMeasureCode, d, activeBatchSheet); 
+      } catch (e) {
+        hideLoading(); alert("通信エラー: " + e.message); 
+      }
     }
 
     let currentPackCode=null; let pendingPackingsData=[]; 
@@ -859,27 +907,27 @@
         }).join('');
     }
 
-    function loadPendingPackings(){
+    async function loadPendingPackings(){
       showLoading("読込中..."); 
-      google.script.run
-      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
-      .withSuccessHandler(function(list){ 
+      try {
+        const list = await rpcCall('getPendingPackings', activeBatchSheet);
         hideLoading(); pendingPackingsData=list;
         document.getElementById('pack-count-badge').innerText=list.length+"件";
         if(!list.length){document.getElementById('pack-list').innerHTML='<div class="empty-state">ありません</div>';return;}
         populatePackFilter(); renderPackList();
-      }).getPendingPackings(activeBatchSheet);
+      } catch(e) {
+        hideLoading(); alert("通信エラー: " + e.message);
+      }
     }
     
-    function openPackConfirmModal(c) {
+    async function openPackConfirmModal(c) {
       currentPackCode = c; let item = pendingPackingsData.find(function(i){return i.code === c});
       let brand = item ? item.brand : "";
       document.getElementById('packConfirmBrand').innerText = brand;
       document.getElementById('packConfirmGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>画像を読込中...</div>';
       document.getElementById('packConfirmModal').style.display = 'flex';
-      google.script.run
-      .withFailureHandler(function(e){ document.getElementById('packConfirmGallery').innerHTML = '<div style="font-size:10px; color:red;">エラー: '+e.message+'</div>'; })
-      .withSuccessHandler(function(res){
+      try {
+        const res = await rpcCall('getItemImagesForAdmin', activeBatchSheet, c);
         if(res.error) { document.getElementById('packConfirmGallery').innerHTML = '<div style="font-size:10px; color:red;">エラー: '+res.error+'</div>'; return; }
         let html = "";
         if(!res.images || res.images.length === 0) { html = '<div style="font-size:10px; color:#666;">画像がありません</div>'; }
@@ -890,7 +938,9 @@
            });
         }
         document.getElementById('packConfirmGallery').innerHTML = html;
-      }).getItemImagesForAdmin(activeBatchSheet, c);
+      } catch (e) {
+        document.getElementById('packConfirmGallery').innerHTML = '<div style="font-size:10px; color:red;">エラー: '+e.message+'</div>';
+      }
     }
     
     function closePackConfirmModal() { document.getElementById('packConfirmModal').style.display = 'none'; }
@@ -902,16 +952,15 @@
       try {
         let b = (await compressImage(this.files[0], 600, 0.4)).split(',')[1]; 
         showLoading("梱包完了処理中...");
-        google.script.run
-        .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
-        .withSuccessHandler(function(res){
-          hideLoading(); document.getElementById('packImageInput').value='';
-          if(res.status === "OK") {
-            if(res.isNewlyAssigned) { document.getElementById('finalAssignedCodeText').innerText = res.finalCode; document.getElementById('finalAssignedCodeModal').style.display = 'flex'; } 
-            else alert("梱包完了しました！（既に付与済みの番号です）"); 
-            loadPendingPackings();
-          } else alert(res.error); 
-        }).savePackingPhotoAndAssignCode(currentPackCode, b, activeBatchSheet);
+        
+        const res = await rpcCall('savePackingPhotoAndAssignCode', currentPackCode, b, activeBatchSheet);
+        hideLoading(); document.getElementById('packImageInput').value='';
+        if(res.status === "OK") {
+          if(res.isNewlyAssigned) { document.getElementById('finalAssignedCodeText').innerText = res.finalCode; document.getElementById('finalAssignedCodeModal').style.display = 'flex'; } 
+          else alert("梱包完了しました！（既に付与済みの番号です）"); 
+          loadPendingPackings();
+        } else alert(res.error); 
+        
       } catch(e) { hideLoading(); alert(e); } 
     });
 
@@ -931,35 +980,56 @@
       document.getElementById('adminMoveTargetBatch').innerHTML = html;
     }
 
-    function executeMoveItems() {
+    async function executeMoveItems() {
       let checkedNodes = document.querySelectorAll('.admin-item-check:checked');
       let codes = Array.from(checkedNodes).map(n => n.value); let targetSheet = document.getElementById('adminMoveTargetBatch').value;
       if (codes.length === 0) return alert("アイテムが選択されていません"); if (!targetSheet) return alert("移動先のバッチを選択してください");
       if (!confirm(`${codes.length}件のアイテムを\n${targetSheet}\nへ移動しますか？`)) return;
       showLoading("移動中...");
-      google.script.run
-      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
-      .withSuccessHandler(function(r){
+      
+      try {
+        const r = await rpcCall('moveItemsToBatch', currentAdminSheet, targetSheet, codes);
         hideLoading();
         if (r.startsWith("OK")) { alert("移動が完了しました！"); document.getElementById('admin-move-panel').style.display = 'none'; loadAdminList(currentAdminSheet); } 
         else alert("エラー: " + r); 
-      }).moveItemsToBatch(currentAdminSheet, targetSheet, codes);
+      } catch (e) {
+        hideLoading(); alert("通信エラー: " + e.message); 
+      }
     }
 
     function openBatchSettingsModal(){document.getElementById('batchSettingsModal').style.display='flex';} function closeBatchSettingsModal(){document.getElementById('batchSettingsModal').style.display='none';}
-    function submitBatchSettings(){ 
+    
+    // ★API新機能: 古いバッチ名が存在する場合は名称更新処理を行う
+    async function submitBatchSettings(){ 
       let p=document.getElementById('batchPrefix').value.trim(),s=parseInt(document.getElementById('batchStart').value),e=parseInt(document.getElementById('batchEnd').value),sx=document.getElementById('batchSuffix').value.trim(); 
       if(!p||!s||!e||!sx||s>=e)return alert("入力エラー"); let n=`${p}${s}${sx}〜${p}${e}${sx}`; 
+      
+      // すでに現在のタブが開いている場合の修正確認
+      if(currentAdminSheet && currentAdminSheet !== "シート1" && currentAdminSheet !== "デフォルトバッチ") {
+          if(confirm(`現在の表示枠「${currentAdminSheet}」の範囲を「${n}」に上書き修正しますか？\n(※完全に新しい枠を作る場合は「キャンセル」を押してください)`)) {
+             closeBatchSettingsModal(); showLoading("範囲を修正中...");
+             try {
+                 const res = await rpcCall('updateBatchRange', currentAdminSheet, p, s, e, sx);
+                 hideLoading();
+                 activeBatchSheet = res; localStorage.setItem('activeBatchSheet', activeBatchSheet); loadAdminList(activeBatchSheet);
+                 return;
+             } catch(e) {
+                 hideLoading(); alert("通信エラー: " + e.message); return;
+             }
+          }
+      }
+      
       if(!confirm(`作成しますか？${n}`))return; closeBatchSettingsModal(); showLoading("作成中..."); 
-      google.script.run
-      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
-      .withSuccessHandler(function(r){
+      try {
+        const r = await rpcCall('saveBatchSettings', {sheetName:n,prefix:p,start:s,end:e,suffix:sx});
         hideLoading();
         if(r==="OK"){ activeBatchSheet = n; localStorage.setItem('activeBatchSheet', activeBatchSheet); loadAdminList(activeBatchSheet); } else alert(r);
-      }).saveBatchSettings({sheetName:n,prefix:p,start:s,end:e,suffix:sx}); 
+      } catch(e) {
+        hideLoading(); alert("通信エラー: " + e.message); 
+      }
     }
 
-    function deleteCurrentBatch() {
+    async function deleteCurrentBatch() {
       if (!currentAdminSheet || currentAdminSheet === "デフォルトバッチ" || currentAdminSheet === "シート1") {
         alert("この枠は削除できません。");
         return;
@@ -967,9 +1037,8 @@
       if (!confirm(`本当に現在の枠「${currentAdminSheet}」を削除しますか？\n※この枠内に登録されているアイテムデータもすべて削除され、元に戻せません！`)) return;
       
       showLoading("枠を削除中...");
-      google.script.run
-      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
-      .withSuccessHandler(function(r){
+      try {
+        const r = await rpcCall('deleteBatch', currentAdminSheet);
         hideLoading();
         if(r === "OK") {
           alert("枠を削除しました。");
@@ -979,18 +1048,19 @@
         } else {
           alert(r);
         }
-      }).deleteBatch(currentAdminSheet);
+      } catch(e) {
+        hideLoading(); alert("通信エラー: " + e.message);
+      }
     }
 
-    function loadAdminList(target=""){
+    async function loadAdminList(target=""){
       if (!target && activeBatchSheet) {
           target = activeBatchSheet;
       }
       
       showLoading("読込中..."); 
-      google.script.run
-      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
-      .withSuccessHandler(function(res){ 
+      try {
+        const res = await rpcCall('getAdminData', target);
         hideLoading(); if(!res.config)return; 
         currentAdminSheet=res.currentViewSheet; lastAdminData = res.itemMap; 
         activeBatchSheet = currentAdminSheet; localStorage.setItem('activeBatchSheet', activeBatchSheet);
@@ -1058,11 +1128,13 @@
         
         document.getElementById('admin-list').innerHTML=html+'</div>'+(shc>0?`<div style="margin-top:20px;text-align:center;color:#888;font-size:12px;font-weight:normal;">配送完了：${shc}件</div>`:'');
         updateMoveTargetDropdown(res.allSheets); toggleMovePanel();
-      }).getAdminData(target);
+      } catch (e) {
+        hideLoading(); alert("通信エラー: " + e.message); 
+      }
     }
 
     let currentEditCode="";
-    function openEditModal(c,isP,ds,errReason){ 
+    async function openEditModal(c,isP,ds,errReason){ 
       currentEditCode=c; let d=JSON.parse(decodeURIComponent(ds)); 
       document.getElementById('editOldCodeDisplay').innerText = c.startsWith("TMP-") ? "未付番" : c; 
       document.getElementById('editOldCodeInput').value=c; document.getElementById('editNewCodeInput').value=""; 
@@ -1080,12 +1152,13 @@
       document.getElementById('editCodeModal').style.display='flex'; 
 
       document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>画像を取得中...</div>';
-      google.script.run
-      .withFailureHandler(function(e){ document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:red;">エラー: '+e.message+'</div>'; })
-      .withSuccessHandler(function(res){
+      try {
+        const res = await rpcCall('getItemImagesForAdmin', currentAdminSheet, c);
         if(res.error) { document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:red;">エラー: '+res.error+'</div>'; return; }
         renderAdminImages(res.images);
-      }).getItemImagesForAdmin(currentAdminSheet, c);
+      } catch(e) {
+        document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:red;">エラー: '+e.message+'</div>';
+      }
     }
 
     let adminSortableInstance = null;
@@ -1118,21 +1191,22 @@
       }
     }
 
-    function saveImageOrder() {
+    async function saveImageOrder() {
       let items = document.querySelectorAll('#adminImageGallery .admin-image-item');
       let newOrder = Array.from(items).map(item => item.getAttribute('data-name'));
       
       document.getElementById('editErrorReason').style.display = 'block';
       document.getElementById('editErrorReason').innerText = "画像を並び替え中...";
       
-      google.script.run
-        .withFailureHandler(function(e){ alert("並び替えエラー: " + e.message); })
-        .withSuccessHandler(function(r){
-           if(r==="OK"){
-             document.getElementById('editErrorReason').innerText = "画像の並び順を保存しました！";
-             setTimeout(() => { document.getElementById('editErrorReason').style.display = 'none'; }, 2000);
-           } else { alert(r); }
-        }).reorderItemImages(currentAdminSheet, currentEditCode, newOrder);
+      try {
+        const r = await rpcCall('reorderItemImages', currentAdminSheet, currentEditCode, newOrder);
+        if(r==="OK"){
+           document.getElementById('editErrorReason').innerText = "画像の並び順を保存しました！";
+           setTimeout(() => { document.getElementById('editErrorReason').style.display = 'none'; }, 2000);
+        } else { alert(r); }
+      } catch (e) {
+        alert("並び替えエラー: " + e.message);
+      }
     }
 
     async function executeBulkReplaceImages(input) {
@@ -1144,31 +1218,31 @@
         const compressedResults = await Promise.all( Array.from(input.files).map(file => compressImage(file)) );
         let base64Images = compressedResults.map(c => ({ mimeType: 'image/jpeg', data: c.split(',')[1] }));
         
-        google.script.run
-        .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); input.value = ""; })
-        .withSuccessHandler(function(r){
-          input.value = ""; hideLoading();
-          if(r === "OK") {
-            alert("画像の一括入れ替えが完了しました！");
-            document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>更新中...</div>';
-            google.script.run.withSuccessHandler(res => renderAdminImages(res.images)).getItemImagesForAdmin(currentAdminSheet, currentEditCode);
-          } else { alert(r); }
-        }).replaceItemImages(currentAdminSheet, currentEditCode, base64Images);
+        const r = await rpcCall('replaceItemImages', currentAdminSheet, currentEditCode, base64Images);
+        input.value = ""; hideLoading();
+        if(r === "OK") {
+          alert("画像の一括入れ替えが完了しました！");
+          document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>更新中...</div>';
+          const res = await rpcCall('getItemImagesForAdmin', currentAdminSheet, currentEditCode);
+          renderAdminImages(res.images);
+        } else { alert(r); }
       } catch(e) { hideLoading(); input.value = ""; alert(e.message); }
     }
 
-    function deleteAdminImageExecute(imgName) {
+    async function deleteAdminImageExecute(imgName) {
       if(!confirm("この画像を削除しますか？")) return;
       showLoading("削除中...");
-      google.script.run
-      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
-      .withSuccessHandler(function(r){
+      try {
+        const r = await rpcCall('deleteAdminImage', currentAdminSheet, currentEditCode, imgName);
         hideLoading();
         if(r === "OK") {
           document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>更新中...</div>';
-          google.script.run.withSuccessHandler(res => renderAdminImages(res.images)).getItemImagesForAdmin(currentAdminSheet, currentEditCode);
+          const res = await rpcCall('getItemImagesForAdmin', currentAdminSheet, currentEditCode);
+          renderAdminImages(res.images);
         } else alert(r);
-      }).deleteAdminImage(currentAdminSheet, currentEditCode, imgName);
+      } catch(e) {
+        hideLoading(); alert("通信エラー: " + e.message); 
+      }
     }
 
     async function uploadExtraImagesAdmin(input) {
@@ -1178,37 +1252,37 @@
         const compressedResults = await Promise.all( Array.from(input.files).map(file => compressImage(file)) );
         let base64Images = compressedResults.map(c => ({ mimeType: 'image/jpeg', data: c.split(',')[1] }));
         
-        google.script.run
-        .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
-        .withSuccessHandler(function(r){
-          hideLoading(); input.value = "";
-          if(r === "OK") {
-            document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>更新中...</div>';
-            google.script.run.withSuccessHandler(res => renderAdminImages(res.images)).getItemImagesForAdmin(currentAdminSheet, currentEditCode);
-          } else alert(r);
-        }).addAdminImages(currentAdminSheet, currentEditCode, base64Images);
+        const r = await rpcCall('addAdminImages', currentAdminSheet, currentEditCode, base64Images);
+        hideLoading(); input.value = "";
+        if(r === "OK") {
+          document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>更新中...</div>';
+          const res = await rpcCall('getItemImagesForAdmin', currentAdminSheet, currentEditCode);
+          renderAdminImages(res.images);
+        } else alert(r);
       } catch(e) { hideLoading(); alert(e.message); }
     }
 
     function closeEditModal(){document.getElementById('editCodeModal').style.display='none';}
     
-    function saveTextEdits(){ 
+    async function saveTextEdits(){ 
       if(!confirm("保存しますか？"))return; 
       closeEditModal(); showLoading("保存中..."); 
       let newStatus = document.getElementById('editItemStatus').value;
-      google.script.run
-      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
-      .withSuccessHandler(function(r){hideLoading();if(r==="OK")loadAdminList(currentAdminSheet);else alert(r);})
-      .updateItemTextData(currentAdminSheet,currentEditCode,document.getElementById('editTextTitle').value,document.getElementById('editTextDesc').value,document.getElementById('editTextDims').value,newStatus); 
+      try {
+        const r = await rpcCall('updateItemTextData', currentAdminSheet,currentEditCode,document.getElementById('editTextTitle').value,document.getElementById('editTextDesc').value,document.getElementById('editTextDims').value,newStatus);
+        hideLoading();
+        if(r==="OK") loadAdminList(currentAdminSheet); else alert(r);
+      } catch(e) {
+        hideLoading(); alert("通信エラー: " + e.message);
+      }
     }
 
-    function executeRetryAI(){ 
+    async function executeRetryAI(){ 
       if(!confirm("AI再生成しますか？\n※選択中の「商品の状態」を反映して文章を上書きします"))return; 
       showLoading("AIで文章を再生成中..."); 
       let newStatus = document.getElementById('editItemStatus').value;
-      google.script.run
-      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
-      .withSuccessHandler(function(res){
+      try {
+        const res = await rpcCall('retryAIGeneration', currentAdminSheet, currentEditCode, newStatus);
         hideLoading();
         if(res && res.title && res.desc){
           document.getElementById('editTextTitle').value = res.title;
@@ -1220,35 +1294,60 @@
         } else { 
           alert(res.error || "不明なエラーが発生しました。"); 
         }
-      }).retryAIGeneration(currentAdminSheet, currentEditCode, newStatus); 
+      } catch(e) {
+        hideLoading(); alert("通信エラー: " + e.message);
+      }
     }
 
-    function submitCodeEdit(){ let o=document.getElementById('editOldCodeInput').value,n=document.getElementById('editNewCodeInput').value.trim().toUpperCase(); if(!n||o===n||!confirm("修正しますか？"))return; closeEditModal(); showLoading("修正中..."); google.script.run.withFailureHandler(function(e){hideLoading();alert(e.message);}).withSuccessHandler(function(r){hideLoading();if(r==="OK")loadAdminList(currentAdminSheet);else alert(r);}).fixManagementCode(currentAdminSheet,o,n); }
-    function deleteItemExecute(){ if(!confirm("削除しますか？"))return; closeEditModal(); showLoading("削除中..."); google.script.run.withFailureHandler(function(e){hideLoading();alert(e.message);}).withSuccessHandler(function(r){hideLoading();if(r==="OK")loadAdminList(currentAdminSheet);else alert(r);}).deleteItemData(currentAdminSheet,currentEditCode); }
+    async function submitCodeEdit(){ 
+      let o=document.getElementById('editOldCodeInput').value,n=document.getElementById('editNewCodeInput').value.trim().toUpperCase(); 
+      if(!n||o===n||!confirm("修正しますか？"))return; 
+      closeEditModal(); showLoading("修正中..."); 
+      try {
+        const r = await rpcCall('fixManagementCode', currentAdminSheet,o,n);
+        hideLoading();
+        if(r==="OK") loadAdminList(currentAdminSheet); else alert(r);
+      } catch(e) {
+        hideLoading(); alert(e.message);
+      }
+    }
+    
+    async function deleteItemExecute(){ 
+      if(!confirm("削除しますか？"))return; 
+      closeEditModal(); showLoading("削除中..."); 
+      try {
+        const r = await rpcCall('deleteItemData', currentAdminSheet,currentEditCode);
+        hideLoading();
+        if(r==="OK") loadAdminList(currentAdminSheet); else alert(r);
+      } catch(e) {
+        hideLoading(); alert(e.message);
+      }
+    }
 
-    function revertPackExecute() {
+    async function revertPackExecute() {
       if(!confirm("梱包ステータスを未梱包に戻し、梱包写真を削除しますか？")) return;
       closeEditModal(); showLoading("戻し中...");
-      google.script.run
-      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
-      .withSuccessHandler(function(r){
-        hideLoading(); if(r === "OK") loadAdminList(currentAdminSheet); else alert(r);
-      }).revertPackingStatus(currentAdminSheet, currentEditCode);
+      try {
+        const r = await rpcCall('revertPackingStatus', currentAdminSheet, currentEditCode);
+        hideLoading(); 
+        if(r === "OK") loadAdminList(currentAdminSheet); else alert(r);
+      } catch(e) {
+        hideLoading(); alert("通信エラー: " + e.message);
+      }
     }
 
     function openIncentiveModal() { document.getElementById('incentiveModal').style.display = 'flex'; if (document.getElementById('incentiveList').innerHTML.includes('集計する')) { loadIncentiveData(); } }
     function closeIncentiveModal() { document.getElementById('incentiveModal').style.display = 'none'; }
     function toggleCustomDates() { let val = document.getElementById('incentivePeriod').value; document.getElementById('customDateContainer').style.display = (val === 'custom') ? 'flex' : 'none'; }
 
-    function loadIncentiveData() {
+    async function loadIncentiveData() {
       let period = document.getElementById('incentivePeriod').value; let customStart = document.getElementById('customStartDate').value; let customEnd = document.getElementById('customEndDate').value;
       if (period === 'custom' && (!customStart || !customEnd)) { alert('開始日と終了日を指定してください'); return; }
       document.getElementById('incentiveList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;"><span class="mini-spinner"></span>データ取得中...<br><span style="font-size:10px;">(※件数が多いと数十秒かかる場合があります)</span></div>';
       document.getElementById('totalIncentiveAmount').innerText = '計算中...'; document.getElementById('totalSalesAmount').innerText = '¥0'; document.getElementById('totalSalesCount').innerText = '0';
       
-      google.script.run
-      .withFailureHandler(function(e){ document.getElementById('incentiveList').innerHTML = '<div style="color:red; padding:20px;">通信エラー: '+e.message+'</div>'; })
-      .withSuccessHandler(function(res) {
+      try {
+        const res = await rpcCall('fetchIncentiveData', period, customStart, customEnd);
         if (res.error) {
           document.getElementById('incentiveList').innerHTML = `<div style="color:red; text-align:center; padding:20px;">エラー: ${res.error}</div>`; document.getElementById('totalIncentiveAmount').innerText = '¥0'; return;
         }
@@ -1266,7 +1365,9 @@
         }
         document.getElementById('incentiveList').innerHTML = html;
         document.getElementById('totalIncentiveAmount').innerText = `¥${totalIncentive.toLocaleString()}`; document.getElementById('totalSalesAmount').innerText = `¥${totalSales.toLocaleString()}`; document.getElementById('totalSalesCount').innerText = res.data ? res.data.length : 0;
-      }).fetchIncentiveData(period, customStart, customEnd);
+      } catch(e) {
+        document.getElementById('incentiveList').innerHTML = '<div style="color:red; padding:20px;">通信エラー: '+e.message+'</div>';
+      }
     }
 
     let isBulkAILogicRunning = false;
@@ -1289,12 +1390,7 @@
         let code = targets[i];
         document.getElementById('ai-running-banner').innerHTML = `<span class="mini-spinner"></span>一括生成中... (${i+1}/${targets.length}件目) <button onclick="stopBulkAI()" style="background:#d32f2f; color:#fff; border:1px solid #fff; padding:6px 12px; border-radius:15px; font-weight:normal; cursor:pointer; font-size:11px; margin-left:10px;">中止する</button>`;
         try {
-          await new Promise((resolve) => {
-             google.script.run
-               .withSuccessHandler(res => resolve())
-               .withFailureHandler(err => resolve())
-               .retryAIGeneration(currentAdminSheet, code, null); 
-          });
+           await rpcCall('retryAIGeneration', currentAdminSheet, code, null); 
         } catch(e) { }
       }
       document.getElementById('ai-running-banner').style.display = 'none';
@@ -1307,37 +1403,34 @@
       isBulkAILogicRunning = false; document.getElementById('ai-running-banner').innerHTML = `<span class="mini-spinner"></span>中止処理中...`;
     }
 
-    function executeBatchDownload() {
+    async function executeBatchDownload() {
         if (!currentAdminSheet) return;
         showLoading("サーバー経由でZIPデータを準備中...\n(※画像が多いと数分かかる場合があります)");
         
-        google.script.run
-        .withFailureHandler(function(e) { hideLoading(); alert("通信エラー: " + e.message); })
-        .withSuccessHandler(async function(res) {
-            try {
-                const zip = new JSZip();
-                const dateStr = new Date().toISOString().replace(new RegExp("[-:T]", "g"), '').slice(0, 14);
-                zip.file(`mercari_${currentAdminSheet}_${dateStr}.csv`, res.csvString);
-                
-                const imgFolder = zip.folder("images");
-                
-                if(res.images && res.images.length > 0) {
-                    res.images.forEach(img => {
-                       if(img.data && img.data !== "") {
-                           imgFolder.file(img.name, img.data, {base64: true});
-                       }
-                    });
-                }
-                
-                document.getElementById('loadingText').innerText = "ZIPファイルをPCに保存中...";
-                const zipBlob = await zip.generateAsync({ type: "blob" });
-                saveAs(zipBlob, `${currentAdminSheet}_export.zip`);
-                hideLoading();
-            } catch (err) {
-                hideLoading();
-                alert("ZIP生成エラー: " + err.message);
+        try {
+            const res = await rpcCall('getBatchDownloadData', currentAdminSheet);
+            const zip = new JSZip();
+            const dateStr = new Date().toISOString().replace(new RegExp("[-:T]", "g"), '').slice(0, 14);
+            zip.file(`mercari_${currentAdminSheet}_${dateStr}.csv`, res.csvString);
+            
+            const imgFolder = zip.folder("images");
+            
+            if(res.images && res.images.length > 0) {
+                res.images.forEach(img => {
+                   if(img.data && img.data !== "") {
+                       imgFolder.file(img.name, img.data, {base64: true});
+                   }
+                });
             }
-        }).getBatchDownloadData(currentAdminSheet);
+            
+            document.getElementById('loadingText').innerText = "ZIPファイルをPCに保存中...";
+            const zipBlob = await zip.generateAsync({ type: "blob" });
+            saveAs(zipBlob, `${currentAdminSheet}_export.zip`);
+            hideLoading();
+        } catch(e) {
+            hideLoading();
+            alert("通信エラー: " + e.message);
+        }
     }
 
     const rawCategories = [
@@ -1349,7 +1442,7 @@
     function renderDropdowns(obj, level, pathArray) { Array.from(dropdownContainer.querySelectorAll('select')).forEach(function(sel, idx) { if(idx>=level)sel.remove(); }); document.getElementById('finalCategoryId').value=""; document.getElementById('finalCategoryText').value=""; if(typeof obj==='string'){ document.getElementById('finalCategoryId').value=obj; document.getElementById('finalCategoryText').value=pathArray.join(' > '); return; } if(!obj||!Object.keys(obj).length)return; const sel=document.createElement('select'); sel.innerHTML=`<option value="" disabled selected>${level+1}階層目を選択</option>`; Object.keys(obj).forEach(function(k){ const opt=document.createElement('option'); opt.value=k; opt.textContent=k; sel.appendChild(opt); }); sel.addEventListener('change', function(e){ const v=e.target.value; const n=[...pathArray, v]; if(v)e.target.classList.add('is-filled'); else e.target.classList.remove('is-filled'); renderDropdowns(obj[v], level+1, n); saveDraftData(); }); dropdownContainer.appendChild(sel); }
     function restoreCategoryTree(pArr){ let cur=categoryTree, cPath=[]; dropdownContainer.innerHTML=''; for(let i=0;i<pArr.length;i++){ renderDropdowns(cur,i,cPath); const sel=dropdownContainer.children[i]; if(sel){ if(Array.from(sel.options).some(function(o){return o.value===pArr[i]})){ sel.value=pArr[i]; sel.classList.add('is-filled'); cur=cur[pArr[i]]; cPath.push(pArr[i]); }else break; } } if(typeof cur==='string'){ document.getElementById('finalCategoryId').value=cur; document.getElementById('finalCategoryText').value=cPath.join(' > '); }else renderDropdowns(cur,pArr.length,cPath); }
     
-    let BRAND_LIST=[]; document.addEventListener('DOMContentLoaded',function(){ renderDropdowns(categoryTree,0,[]); restoreDraftData(); google.script.run.withFailureHandler(function(e){ document.getElementById('brandLoadStatus').innerText="(取得失敗)"; }).withSuccessHandler(function(b){ BRAND_LIST=b; document.getElementById('brandLoadStatus').innerText="(準備完了)"; }).getBrandList(); });
+    let BRAND_LIST=[]; document.addEventListener('DOMContentLoaded',async function(){ renderDropdowns(categoryTree,0,[]); restoreDraftData(); try{ BRAND_LIST=await rpcCall('getBrandList'); document.getElementById('brandLoadStatus').innerText="(準備完了)"; }catch(e){ document.getElementById('brandLoadStatus').innerText="(取得失敗)"; } });
     const bInput=document.getElementById("brand"), bIdInput=document.getElementById("brandId"), aList=document.getElementById("brand-autocomplete-list");
     bInput.addEventListener("input", function(){ let v=this.value; aList.innerHTML=""; bIdInput.value=""; if(!v)return; let c=0, u=v.toUpperCase(); for(let i=0;i<BRAND_LIST.length;i++){ let bId=BRAND_LIST[i][0], bN=BRAND_LIST[i][1], bK=BRAND_LIST[i][2]||"", bE=BRAND_LIST[i][3]||""; if(bN.toUpperCase().includes(u)||bK.toUpperCase().includes(u)||bE.toUpperCase().includes(u)){ let d=document.createElement("div"); d.innerHTML=bN.replace(new RegExp(`(${v})`,"gi"),`<span style="font-weight:normal;">$1</span>`); d.addEventListener("click",function(){ bInput.value=bN; bIdInput.value=bId; bInput.classList.add('is-filled'); aList.innerHTML=""; saveDraftData(); }); aList.appendChild(d); c++; if(c>=30)break; } } });
     document.addEventListener("click", function(e){ if(e.target!==bInput)aList.innerHTML=""; });
