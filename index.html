@@ -11,8 +11,6 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&display=swap" rel="stylesheet">
   
-  <!-- S3/R2アップロード用にAWS SDKを復活 -->
-  <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1438.0.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
@@ -26,7 +24,7 @@
     .main-buttons-container { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 0; padding: 0 10px; }
     .home-icon-main { width: 40px; height: 40px; object-fit: contain; flex-shrink: 0; }
     
-    .home-action-btn { width: 100%; flex-grow: 0; height: 64px; border-radius: 12px; border: 2px solid #111; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-direction: row; gap: 8px; transition: 0.1s; font-family: 'Dela Gothic One', sans-serif; font-size: 19px; font-weight: normal; color: #111; padding: 0 10px; text-align: center; letter-spacing: 0.5px; box-sizing: border-box; }
+    .home-action-btn { width: 100%; flex-grow: 0; height: 64px; border-radius: 12px; border: 2px solid #111; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-direction: row; gap: 8px; font-family: 'Dela Gothic One', sans-serif; font-size: 19px; font-weight: normal; color: #111; padding: 0 10px; text-align: center; letter-spacing: 0.5px; }
     .home-action-btn * { pointer-events: none; }
     .home-action-btn:active { opacity: 0.7; transform: scale(0.98); }
     
@@ -58,8 +56,8 @@
     label.title{font-weight:normal;font-size:14px;display:block;margin-bottom:4px;}
     .required{color:#d32f2f;font-size:12px;margin-left:3px;}
     
-    /* ピクつき防止：transitionを削除し、サイズを完全固定化 */
-    input[type="text"],input[type="number"],input[type="date"],select,input[type="file"],textarea{width:100%;padding:8px 10px;background:#f9f9f9;border:1px solid #ddd;border-radius:6px;font-size:16px;margin-bottom:4px;-webkit-appearance:none; height:auto; line-height:normal;}
+    /* ★ピクつき防止：transitionを削除し、サイズを完全固定化 */
+    input[type="text"],input[type="number"],input[type="date"],select,input[type="file"],textarea{width:100%;padding:8px 10px;background:#f9f9f9;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;font-size:16px;margin-bottom:4px;-webkit-appearance:none; height:auto; line-height:normal;}
     input:focus,select:focus,textarea:focus{background:#fff;border-color:#111;outline:none;}
     .is-filled{background:#fafafa!important;border-color:#999!important;}
     
@@ -140,7 +138,7 @@
     .mini-spinner{display:inline-block;width:10px;height:10px;border:2px solid #555;border-top:2px solid #fff;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;margin-right:6px;}
 
     .admin-image-gallery { display:flex; gap:8px; overflow-x:auto; padding:4px 0 10px 0; }
-    .admin-image-item { position:relative; flex-shrink:0; cursor:grab;}
+    .admin-image-item { position:relative; flex-shrink:0; cursor:grab; }
     .admin-image-item:active { cursor:grabbing; }
     .admin-image-img { width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid #ddd; }
     .admin-image-delete { position:absolute; top:-6px; right:-6px; background:#d32f2f; color:#fff; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:normal; cursor:pointer; z-index:10; }
@@ -472,12 +470,8 @@
   <div id="ai-running-banner" style="display:none; position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#111; color:#fff; padding:12px 20px; border-radius:30px; z-index:5000; font-size:13px; font-weight:normal; white-space:nowrap; align-items:center; gap:10px;"></div>
 
   <script>
-    let lastAdminData = null; 
-    let activeBatchSheet = localStorage.getItem('activeBatchSheet') || "";
-
-    // ★重要: API（FastAPI）のURLを定義（ご自身の環境のURLに書き換えてください）
-    // 現在のコードは「同一ドメインで動いている」前提（/api/rpc）で書かれています
-    const API_ENDPOINT = '/api/rpc';
+    // ★重要: GitHub（FastAPI）用の通信設定
+    const API_ENDPOINT = '/api/rpc'; // デプロイ先と同じドメインを想定
 
     // ----------------------------------------------------
     // GASの google.script.run の代わりになる汎用通信関数
@@ -505,6 +499,9 @@
         throw err;
       }
     }
+
+    let lastAdminData = null; 
+    let activeBatchSheet = localStorage.getItem('activeBatchSheet') || "";
 
     window.onerror = function(msg, url, line, col, error) {
         let errDiv = document.createElement("div");
@@ -621,7 +618,7 @@
       document.getElementById('imagePreviewModal').style.display = 'flex';
     }
 
-    // テンキー動作（スマホでのピクつきを防止するためfocus削除）
+    // ★重要: テンキー動作（スマホでのピクつきを防止するため focus() を完全に削除）
     function insertAtCursor(val) {
         let el = document.getElementById('numpadInput'); let start = el.selectionStart; let end = el.selectionEnd; let text = el.value;
         el.value = text.substring(0, start) + val + text.substring(end);
@@ -999,12 +996,10 @@
 
     function openBatchSettingsModal(){document.getElementById('batchSettingsModal').style.display='flex';} function closeBatchSettingsModal(){document.getElementById('batchSettingsModal').style.display='none';}
     
-    // ★API新機能: 古いバッチ名が存在する場合は名称更新処理を行う
     async function submitBatchSettings(){ 
       let p=document.getElementById('batchPrefix').value.trim(),s=parseInt(document.getElementById('batchStart').value),e=parseInt(document.getElementById('batchEnd').value),sx=document.getElementById('batchSuffix').value.trim(); 
       if(!p||!s||!e||!sx||s>=e)return alert("入力エラー"); let n=`${p}${s}${sx}〜${p}${e}${sx}`; 
       
-      // すでに現在のタブが開いている場合の修正確認
       if(currentAdminSheet && currentAdminSheet !== "シート1" && currentAdminSheet !== "デフォルトバッチ") {
           if(confirm(`現在の表示枠「${currentAdminSheet}」の範囲を「${n}」に上書き修正しますか？\n(※完全に新しい枠を作る場合は「キャンセル」を押してください)`)) {
              closeBatchSettingsModal(); showLoading("範囲を修正中...");
@@ -1390,7 +1385,9 @@
         let code = targets[i];
         document.getElementById('ai-running-banner').innerHTML = `<span class="mini-spinner"></span>一括生成中... (${i+1}/${targets.length}件目) <button onclick="stopBulkAI()" style="background:#d32f2f; color:#fff; border:1px solid #fff; padding:6px 12px; border-radius:15px; font-weight:normal; cursor:pointer; font-size:11px; margin-left:10px;">中止する</button>`;
         try {
-           await rpcCall('retryAIGeneration', currentAdminSheet, code, null); 
+          await new Promise((resolve) => {
+             rpcCall('retryAIGeneration', currentAdminSheet, code, null).then(resolve).catch(resolve);
+          });
         } catch(e) { }
       }
       document.getElementById('ai-running-banner').style.display = 'none';
