@@ -7,9 +7,9 @@ import io
 import base64
 import requests
 import unicodedata
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from supabase import create_client, Client
 
 # --- 環境設定 ---
@@ -25,6 +25,7 @@ GAS_API_URL = "https://script.google.com/macros/s/AKfycbwX3CsxVEfZ1OUa5ytPkBmsEl
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL else None
 app = FastAPI()
 
+# CORSの完全な許可
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -192,9 +193,21 @@ def build_title(data, ai_data, gender_str, code):
 
 
 # --- バックエンド通信口（RPC） ---
-@app.post("/api/rpc")
-async def rpc_endpoint(req: Request):
-    payload = await req.json()
+# ★修正：POSTだけでなく、OPTIONS（CORSのプレフライト）やGETなど全てのメソッドを許可して405エラーを回避します。
+@app.api_route("/api/rpc", methods=["GET", "POST", "OPTIONS"])
+async def rpc_endpoint(req: Request, response: Response):
+    # CORS対応用のプレフライトリクエストには即座にOKを返す
+    if req.method == "OPTIONS":
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        return JSONResponse(content={"data": "OK"})
+
+    try:
+        payload = await req.json()
+    except:
+        return JSONResponse(content={"error": "Invalid JSON"}, status_code=400)
+
     method = payload.get("method")
     args = payload.get("args", [])
     
@@ -252,9 +265,9 @@ async def rpc_endpoint(req: Request):
             
         elif method == "getBrandList":
             try:
-                response = requests.get(f"{GAS_API_URL}?method=getBrandList")
-                response.raise_for_status()
-                brand_data = response.json()
+                response_gas = requests.get(f"{GAS_API_URL}?method=getBrandList")
+                response_gas.raise_for_status()
+                brand_data = response_gas.json()
                 return {"data": brand_data.get("data", [])}
             except Exception as e:
                 print(f"Brand list fetch error: {e}")
@@ -294,7 +307,6 @@ async def rpc_endpoint(req: Request):
             
             return {"data": {"code": code, "error": None}}
 
-        # ★修正：TMP強制判定を削除し、説明文だけで判定
         elif method == "getPendingMeasurements":
             targetSheetName = args[0] if args and args[0] else None
             config = get_batch_settings()
@@ -308,8 +320,8 @@ async def rpc_endpoint(req: Request):
                 c = str(r.get("item_code", ""))
                 if c == "SYSTEM_SETTINGS" or c.startswith("BATCH-"): continue
                 
-                desc = str(r.get("description", ""))
-                if "【寸法データ未入力" in desc:
+                desc_text = str(r.get("description", ""))
+                if "【寸法データ未入力" in desc_text:
                     img = r.get("images", [])
                     thumb = img[0] if img else ""
                     items.append({
@@ -353,7 +365,6 @@ async def rpc_endpoint(req: Request):
             supabase.table("mercari_items").update(update_payload).eq("item_code", code).execute()
             return {"data": "OK"}
             
-        # ★修正：TMP判定を除去し、採寸済みの未梱包だけを取得
         elif method == "getPendingPackings":
             targetSheetName = args[0] if args and args[0] else None
             config = get_batch_settings()
@@ -367,8 +378,8 @@ async def rpc_endpoint(req: Request):
                 c = str(r.get("item_code", ""))
                 if c == "SYSTEM_SETTINGS" or c.startswith("BATCH-"): continue
                 
-                desc = str(r.get("description", ""))
-                if "【寸法データ未入力" not in desc:
+                desc_text = str(r.get("description", ""))
+                if "【寸法データ未入力" not in desc_text:
                     img = r.get("images", [])
                     thumb = img[0] if img else ""
                     items.append({
@@ -435,14 +446,14 @@ async def rpc_endpoint(req: Request):
                 
                 img = r.get("images", [])
                 thumbName = img[0] if img and isinstance(img, list) and len(img) > 0 else ""
-                desc = str(r.get("description", ""))
+                desc_text = str(r.get("description", ""))
                 
-                dims_status = "測定済" if "【実寸" in desc or "【寸法データ未入力" not in desc else ""
+                dims_status = "測定済" if "【実寸" in desc_text or "【寸法データ未入力" not in desc_text else ""
                 
                 itemMap[code] = {
                     "count": 1, "row": i + 2, "status": "出品完了", "dims": dims_status,
                     "brand": r.get("brand", "") or "ブランド不明", "statusText": r.get("status_text", ""),
-                    "title": r.get("title", ""), "desc": desc,
+                    "title": r.get("title", ""), "desc": desc_text,
                     "thumbUrl": f"{PUBLIC_URL}/{thumbName}" if thumbName else "",
                     "packStatus": r.get("pack_status", ""), "shipStatus": "",
                     "missingImages": [], "hasMissingImage": False
@@ -600,6 +611,32 @@ async def rpc_endpoint(req: Request):
             for c in codes:
                 supabase.table("mercari_items").update({"batch_name": target_batch}).eq("item_code", c).execute()
             return {"data": "OK"}
+
+        elif method == "updateBatchRange":
+            old_batch = args[0]
+            new_p = args[1]
+            new_s = int(args[2])
+            new_e = int(args[3])
+            new_sx = args[4]
+            new_batch_name = f"{new_p}{new_s}{new_sx}〜{new_p}{new_e}{new_sx}"
+            
+            if old_batch == new_batch_name:
+                return {"data": "OK"}
+                
+            supabase.table("mercari_items").update({"batch_name": new_batch_name}).eq("batch_name", old_batch).execute()
+            
+            config = get_batch_settings()
+            if config.get("sheetName") == old_batch:
+                new_config = {
+                    "sheetName": new_batch_name,
+                    "prefix": new_p,
+                    "start": new_s,
+                    "end": new_e,
+                    "suffix": new_sx
+                }
+                save_batch_settings(new_config)
+                
+            return {"data": new_batch_name}
 
         elif method == "fetchIncentiveData":
             return {"data": []}
