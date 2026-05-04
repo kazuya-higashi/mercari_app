@@ -17,8 +17,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
   
   <style>
-    * { touch-action: manipulation; }
-    body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;padding:15px 10px;background:#EFEFEF;color:#111;}
+    * { touch-action: manipulation; box-sizing: border-box; }
+    body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;padding:15px 10px;background:#EFEFEF;color:#111; margin:0;}
     .container{max-width:500px;margin:0 auto;background:#EFEFEF;padding:10px;border-radius:16px;position:relative;}
     
     .app-main-title { font-family: 'Dela Gothic One', sans-serif; font-size: 25px; text-align: center; margin-top: 80px; margin-bottom: 40px; color: #111; }
@@ -50,15 +50,15 @@
     #screen-measure .mode-title{color:#008B99;} #screen-measure .nav-bar-border{border-bottom:1px solid #00E5FF; margin-bottom: 15px;} #screen-measure .back-btn{background:#00E5FF;border-color:#111;}
     #screen-pack .mode-title{color:#B38F00;} #screen-pack .nav-bar{border-color:#FFDE59;} #screen-pack .back-btn{background:#FFDE59;border-color:#111;}
     #screen-admin .mode-title{color:#6A35FF;} #screen-admin .nav-bar{border-color:#B28DFF;} #screen-admin .back-btn{background:#B28DFF;border-color:#111;}
-    .back-btn{padding:8px 16px;border-radius:8px;font-weight:normal;font-size:13px;cursor:pointer;border:1px solid transparent;color:#111;}
+    .back-btn{padding:8px 16px;border-radius:8px;font-weight:normal;font-size:13px;cursor:pointer;transition:0.1s;border:1px solid transparent;color:#111;}
     .back-btn:active{opacity: 0.7;}
     
     .question-block{margin-top:10px;position:relative;}
     label.title{font-weight:normal;font-size:14px;display:block;margin-bottom:4px;}
     .required{color:#d32f2f;font-size:12px;margin-left:3px;}
     
-    /* ピクッと動くレイアウトシフトを防ぐために transition を削除しサイズを固定 */
-    input[type="text"],input[type="number"],input[type="date"],select,input[type="file"],textarea{width:100%;padding:8px 10px;background:#f9f9f9;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;font-size:16px;margin-bottom:4px;-webkit-appearance:none;}
+    /* ★ピクつき防止：transitionを削除し、サイズを完全固定化 */
+    input[type="text"],input[type="number"],input[type="date"],select,input[type="file"],textarea{width:100%;padding:8px 10px;background:#f9f9f9;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;font-size:16px;margin-bottom:4px;-webkit-appearance:none; height:auto; line-height:normal;}
     input:focus,select:focus,textarea:focus{background:#fff;border-color:#111;outline:none;}
     .is-filled{background:#fafafa!important;border-color:#999!important;}
     
@@ -68,13 +68,13 @@
     .radio-group input[type="radio"]:checked + span{font-weight:normal;color:#fff;}
     .radio-group label:has(input:checked){background:#111;border-color:#111;color:#fff;}
     
-    button.submit-btn{font-family:'Dela Gothic One',sans-serif; width:100%;padding:10px;margin-top:15px;background:#111;color:#fff;border:1px solid #111;border-radius:8px;font-size:16px;font-weight:normal;cursor:pointer;}
+    button.submit-btn{font-family:'Dela Gothic One',sans-serif; width:100%;padding:10px;margin-top:15px;background:#111;color:#fff;border:1px solid #111;border-radius:8px;font-size:16px;font-weight:normal;cursor:pointer;transition:0.1s;}
     button.submit-btn:active{opacity: 0.7;}
-    button.submit-btn:disabled{background:#ddd;border-color:#ddd;color:#888;}
+    button.submit-btn:disabled{background:#ddd;border-color:#ddd;color:#888;transform:none;}
     
     .camera-wrapper { width: 100%; aspect-ratio: 1 / 1; background: #000; border-radius: 12px; overflow: hidden; position: relative; margin-bottom: 10px; border: 1px solid #ccc; }
     #camera-stream { width: 100%; height: 100%; object-fit: cover; }
-    .shutter-btn { width: 64px; height: 64px; border-radius: 50%; background: #FF90E8; border: 4px solid #fff; outline: 3px solid #111; cursor: pointer; margin: 0 auto 5px auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .shutter-btn { width: 64px; height: 64px; border-radius: 50%; background: #FF90E8; border: 4px solid #fff; outline: 3px solid #111; cursor: pointer; margin: 0 auto 5px auto; transition: 0.1s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
     .shutter-btn:active { transform: scale(0.9); background: #d53f8c; }
     .preview-list { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; min-height: 70px; }
     .preview-item { position: relative; flex-shrink: 0; cursor: grab; }
@@ -88,10 +88,10 @@
     
     .modal-code-text{font-size:32px;font-weight:normal;margin:15px 0;letter-spacing:2px;background:#fff;padding:15px;border-radius:12px;border:1px dashed #111;}
     
-    .modal-btn{font-family:'Dela Gothic One',sans-serif; background:#111;color:#fff;border:1px solid #111;padding:14px 30px;border-radius:10px;font-weight:normal;cursor:pointer;width:100%;margin-top:10px;}
+    .modal-btn{font-family:'Dela Gothic One',sans-serif; background:#111;color:#fff;border:1px solid #111;padding:14px 30px;border-radius:10px;font-weight:normal;cursor:pointer;width:100%;margin-top:10px;transition:0.1s;}
     .modal-btn:active,.modal-btn-sub:active{opacity: 0.7;}
     .modal-btn-cancel{background:#f0f0f0;color:#333;border:1px solid #ddd;padding:14px 30px;border-radius:10px;font-weight:normal;cursor:pointer;width:100%;margin-top:10px;}
-    .modal-btn-sub{font-family:'Dela Gothic One',sans-serif; background:#fff;color:#111;border:1px solid #111;padding:12px;border-radius:10px;font-size:13px;font-weight:normal;cursor:pointer;width:100%;margin-top:10px;}
+    .modal-btn-sub{font-family:'Dela Gothic One',sans-serif; background:#fff;color:#111;border:1px solid #111;padding:12px;border-radius:10px;font-size:13px;font-weight:normal;cursor:pointer;width:100%;margin-top:10px;transition:0.1s;}
     .modal-btn-danger{background:#fff;color:#d32f2f;border:1px solid #d32f2f;padding:12px;border-radius:10px;font-size:13px;font-weight:normal;cursor:pointer;width:100%;margin-top:10px;}
     
     .admin-sheet-tabs{display:flex;overflow-x:auto;gap:8px;padding-bottom:12px;margin-bottom:15px;border-bottom:1px solid #eaeaea;white-space:nowrap;}
@@ -101,7 +101,7 @@
     .admin-header{background:#fff;padding:6px 10px;border-radius:10px;margin-bottom:15px;text-align:center;border:1px solid #111;}
     .batch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(95px,1fr));gap:6px;margin-top:10px;}
     
-    .batch-item{position:relative; padding:0;border-radius:6px;border:1px solid #ddd;display:flex;align-items:center;justify-content:flex-start;height:32px;box-sizing:border-box;overflow:hidden;cursor:pointer;}
+    .batch-item{position:relative; padding:0;border-radius:6px;border:1px solid #ddd;display:flex;align-items:center;justify-content:flex-start;transition:0.1s;height:32px;box-sizing:border-box;overflow:hidden;cursor:pointer;}
     .item-empty{background:#fafafa;color:#aaa;border-style:dashed;cursor:default;padding-left:10px;}
     .item-active{background:#FF90E8;color:#111;}
     .item-measured{background:#00E5FF;color:#111;}
@@ -139,7 +139,7 @@
     .mini-spinner{display:inline-block;width:10px;height:10px;border:2px solid #555;border-top:2px solid #fff;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;margin-right:6px;}
 
     .admin-image-gallery { display:flex; gap:8px; overflow-x:auto; padding:4px 0 10px 0; }
-    .admin-image-item { position:relative; flex-shrink:0; cursor:grab;}
+    .admin-image-item { position:relative; flex-shrink:0; cursor:grab; transition: opacity 0.2s; }
     .admin-image-item:active { cursor:grabbing; }
     .admin-image-img { width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid #ddd; }
     .admin-image-delete { position:absolute; top:-6px; right:-6px; background:#d32f2f; color:#fff; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:normal; cursor:pointer; z-index:10; }
@@ -563,9 +563,18 @@
     }
     
     function checkAndGoNew() {
-      // ※ここではご指定通り、元のHTMLの通信構造をそのまま残しています（API呼び出しなどに適宜読み替えてください）
-      switchScreen('screen-new');
-      initCamera(); 
+      showLoading("空き枠を確認中...");
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
+      .withSuccessHandler(function(isFull){
+        hideLoading();
+        if(isFull) {
+          alert("設定の上限数を超えているため、ダッシュボードから新たに枠を作ってください。");
+        } else {
+          switchScreen('screen-new');
+          initCamera(); 
+        }
+      }).checkBatchFull(activeBatchSheet);
     }
 
     function showLoading(t) { document.getElementById('loadingText').innerText = t; document.getElementById('loadingOverlay').style.display = 'flex'; }
@@ -578,8 +587,7 @@
       document.getElementById('imagePreviewModal').style.display = 'flex';
     }
 
-    // --- テンキー動作（ピクつきバグ解消版） ---
-    // 強制的にカーソルを合わせる el.focus() を削除し、スマホがキーボードを出そうとして画面が跳ねるのを防ぎます
+    // ★重要修正: inputへの自動フォーカス(el.focus())を全削除し、スマホでの画面の跳ね（ピクつき）を防止します
     function insertAtCursor(val) {
         let el = document.getElementById('numpadInput'); let start = el.selectionStart; let end = el.selectionEnd; let text = el.value;
         el.value = text.substring(0, start) + val + text.substring(end);
@@ -592,22 +600,6 @@
         if (start === end && start > 0) { el.value = text.substring(0, start - 1) + text.substring(end); el.setSelectionRange(start - 1, start - 1); } 
         else if (start !== end) { el.value = text.substring(0, start) + text.substring(end); el.setSelectionRange(start, start); }
     }
-    
-    // Numpadのオープン処理（ここにあった自動focus処理も削除しました）
-    function openNumpad(c){
-      currentMeasureCode=c; 
-      document.getElementById('numpadInput').value = ""; document.getElementById('raglanCheck').checked = false;
-      let item=pendingMeasurementsData.find(function(i){return i.code===c});
-      let thumb = (item && item.thumbUrl) ? item.thumbUrl : ''; let brand = (item && item.brand) ? item.brand : '不明'; let catText = (item && item.categoryText) ? item.categoryText : '';
-      document.getElementById('numpad-item-thumb').src=thumb; document.getElementById('numpad-item-brand').innerText=brand; 
-      document.getElementById('numpad-item-code').innerText= c.startsWith("TMP-") ? "未付番" : c;
-      let isBottoms = (catText.includes('パンツ')||catText.includes('スカート')||catText.includes('ボトムス'));
-      document.getElementById('raglan-container').style.display = isBottoms ? 'none' : 'block';
-      updateNumpadInstruction(); 
-      document.getElementById('customNumpad').style.display='block';
-    }
-    
-    function closeNumpad(){document.getElementById('customNumpad').style.display='none';}
 
     document.addEventListener('DOMContentLoaded', function() { 
       let savedBatch = localStorage.getItem('activeBatchSheet');
@@ -615,7 +607,19 @@
           savedBatch = null;
           localStorage.removeItem('activeBatchSheet');
       }
-      if (savedBatch) { activeBatchSheet = savedBatch; }
+
+      if (savedBatch) {
+          activeBatchSheet = savedBatch;
+      }
+      
+      google.script.run
+      .withFailureHandler(function(e){ console.error(e); })
+      .withSuccessHandler(function(res) {
+        if(res && res.config && !savedBatch) {
+          activeBatchSheet = res.config.sheetName;
+          localStorage.setItem('activeBatchSheet', activeBatchSheet);
+        }
+      }).getAdminData(activeBatchSheet);
     });
 
     let isUploadingBackground=false;
@@ -680,6 +684,152 @@
       });
     }
 
+    let pendingUploadData=null; 
+    
+    async function startSubmissionProcess(){
+      if(isUploadingBackground){alert("前の処理をお待ちください");return;}
+      let b=document.getElementById('brand').value.trim(); let s=document.getElementById('statusText').value;
+      let rSize = document.querySelector('input[name="size"]:checked'); let sz = rSize ? rSize.value : document.getElementById('sizeOtherText').value.trim();
+      let cId=document.getElementById('finalCategoryId').value;
+      if(capturedBlobs.length === 0 || !b || !sz || !cId){alert("必須項目が未入力、または写真がありません");return;}
+      
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      showLoading("Googleドライブ経由で通信準備中...");
+
+      google.script.run
+      .withFailureHandler(function(e){hideLoading();alert("エラー:"+e.message);})
+      .withSuccessHandler(async function(res){
+        if(res.error){hideLoading();alert(res.error);return;}
+        let targetCode = res.code; 
+
+        let base64Images = await Promise.all(capturedBlobs.map(async (item) => {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve({ mimeType: 'image/jpeg', data: reader.result.split(',')[1] });
+                reader.readAsDataURL(item.blob);
+            });
+        }));
+
+        let rMat = document.querySelector('input[name="materialRadio"]:checked'); let mat = rMat ? rMat.value : '';
+        if(mat==='その他')mat=document.getElementById('materialOther').value.trim();
+        
+        pendingUploadData = {
+          code: targetCode, brand: b, brandId: document.getElementById('brandId').value, keywords: document.getElementById('freeKeywords').value.trim(),
+          materialText: mat||"", statusText: s, sizeInput: sz, categoryId: cId, categoryText: document.getElementById('finalCategoryText').value,
+          images: base64Images, thumbData: ""
+        };
+        
+        hideLoading(); 
+        document.getElementById('assignedCodeDisplay').innerText = res.displayCount + "点目"; 
+        document.getElementById('assignedCodeModal').style.display='flex';
+      }).reserveNewCode(activeBatchSheet);
+    }
+    
+    function closeAssignedCodeModal(){
+      isUploadingBackground=true; 
+      document.getElementById('assignedCodeModal').style.display='none'; 
+      document.getElementById('form-new').reset(); 
+      document.getElementById('materialOther').style.display='none'; 
+      renderDropdowns(categoryTree,0,[]); 
+      localStorage.removeItem('factoryDraftFormData'); 
+      document.getElementById('submitNewBtn').disabled=true; 
+      document.getElementById('submitNewBtn').innerText="処理中..."; 
+      document.getElementById('bg-status-badge').style.display="block";
+      
+      capturedBlobs = []; 
+      let countDisp = document.getElementById('photo-count-display');
+      if(countDisp) countDisp.innerText = 0;
+      renderPreviews();
+
+      google.script.run.withFailureHandler(function(e){ 
+          isUploadingBackground=false; document.getElementById('submitNewBtn').disabled=false; document.getElementById('submitNewBtn').innerText="送信する"; document.getElementById('bg-status-badge').style.display="none";
+          alert("通信エラーが発生しました。\n詳細: " + (e.message || "タイムアウト")); 
+      }).withSuccessHandler(function(res){ 
+          isUploadingBackground=false; pendingUploadData=null; document.getElementById('submitNewBtn').disabled=false; document.getElementById('submitNewBtn').innerText="送信する"; document.getElementById('bg-status-badge').style.display="none"; 
+          if(res && res.error && !res.error.includes("一部の画像")) alert(res.error); 
+      }).processHeavyData(pendingUploadData.code,pendingUploadData, activeBatchSheet);
+    }
+
+    let currentMeasureCode=null; let pendingMeasurementsData=[]; 
+    
+    function populateMeasureFilter() {
+        let cats = new Set();
+        pendingMeasurementsData.forEach(function(i) {
+            let parts = (i.categoryText || "").split("＞").map(function(s){return s.trim()});
+            let cat = parts.length > 1 ? parts[1] : (parts.length > 0 ? parts[0] : "未分類");
+            cats.add(cat);
+        });
+        let sel = document.getElementById('measureCategoryFilter'); let html = '<option value="">全て表示</option>';
+        cats.forEach(function(c) { html += `<option value="${c}">${c}</option>` });
+        sel.innerHTML = html;
+    }
+
+    function renderMeasureList() {
+        let sel = document.getElementById('measureCategoryFilter').value; let list = pendingMeasurementsData;
+        if(sel) {
+            list = list.filter(function(i) {
+                let parts = (i.categoryText || "").split("＞").map(function(s){return s.trim()});
+                let cat = parts.length > 1 ? parts[1] : (parts.length > 0 ? parts[0] : "未分類");
+                return cat === sel;
+            });
+        }
+        document.getElementById('measure-list').innerHTML=list.map(function(i){
+            let thumb = i.thumbUrl ? i.thumbUrl : 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+            let dispCode = i.code.startsWith("TMP-") ? "未付番" : i.code;
+            return `<div class="item-card" onclick="openNumpad('${i.code}')"><img src="${thumb}" class="item-thumb"><div class="item-info"><div class="item-brand-main">${i.brand}</div><div class="item-code-sub">${dispCode}</div></div><div style="font-weight:normal;font-size:18px;">＋</div></div>`
+        }).join('');
+    }
+
+    function loadPendingMeasurements(){
+      showLoading("読込中..."); 
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
+      .withSuccessHandler(function(list){ 
+        hideLoading(); pendingMeasurementsData=list;
+        document.getElementById('measure-count-badge').innerText=list.length+"件";
+        if(!list.length){document.getElementById('measure-list').innerHTML='<div class="empty-state">ありません</div>';return;}
+        populateMeasureFilter(); renderMeasureList();
+      }).getPendingMeasurements(activeBatchSheet);
+    }
+
+    function updateNumpadInstruction() {
+        let item = pendingMeasurementsData.find(function(i){return i.code===currentMeasureCode});
+        let catText = (item && item.categoryText) ? item.categoryText : '';
+        let isBottoms = (catText.includes('パンツ')||catText.includes('スカート')||catText.includes('ボトムス'));
+        let isRaglan = document.getElementById('raglanCheck').checked;
+        if (isBottoms) document.getElementById('numpad-instruction').innerText = "W / 全長 / 股下 / 裾幅 / わたり";
+        else if (isRaglan) document.getElementById('numpad-instruction').innerText = "着丈 / 身幅 / 裄丈";
+        else document.getElementById('numpad-instruction').innerText = "肩幅 / 着丈 / 身幅 / 袖丈";
+    }
+
+    function openNumpad(c){
+      currentMeasureCode=c; 
+      document.getElementById('numpadInput').value = ""; document.getElementById('raglanCheck').checked = false;
+      let item=pendingMeasurementsData.find(function(i){return i.code===c});
+      let thumb = (item && item.thumbUrl) ? item.thumbUrl : ''; let brand = (item && item.brand) ? item.brand : '不明'; let catText = (item && item.categoryText) ? item.categoryText : '';
+      document.getElementById('numpad-item-thumb').src=thumb; document.getElementById('numpad-item-brand').innerText=brand; 
+      document.getElementById('numpad-item-code').innerText= c.startsWith("TMP-") ? "未付番" : c;
+      let isBottoms = (catText.includes('パンツ')||catText.includes('スカート')||catText.includes('ボトムス'));
+      document.getElementById('raglan-container').style.display = isBottoms ? 'none' : 'block';
+      updateNumpadInstruction(); 
+      document.getElementById('customNumpad').style.display='block';
+    }
+    
+    function closeNumpad(){document.getElementById('customNumpad').style.display='none';}
+    
+    function submitMeasurement(){ 
+      let el = document.getElementById('numpadInput'); let d = el.value.trim(); 
+      if(!d||!confirm(`確定しますか？ [${d}]`))return; 
+      let isRaglan = document.getElementById('raglanCheck').checked; if (isRaglan) d = "R " + d;
+      showLoading("送信中..."); 
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
+      .withSuccessHandler(function(r){
+        hideLoading();
+        if(r==="OK"){ document.getElementById('customNumpad').style.display='none'; loadPendingMeasurements(); } else alert("エラー: " + r);
+      }).saveMeasurement(currentMeasureCode, d, activeBatchSheet); 
+    }
+
     let currentPackCode=null; let pendingPackingsData=[]; 
     
     function populatePackFilter() {
@@ -709,19 +859,62 @@
         }).join('');
     }
 
-    function updateNumpadInstruction() {
-        let item = pendingMeasurementsData.find(function(i){return i.code===currentMeasureCode});
-        let catText = (item && item.categoryText) ? item.categoryText : '';
-        let isBottoms = (catText.includes('パンツ')||catText.includes('スカート')||catText.includes('ボトムス'));
-        let isRaglan = document.getElementById('raglanCheck').checked;
-        if (isBottoms) document.getElementById('numpad-instruction').innerText = "W / 全長 / 股下 / 裾幅 / わたり";
-        else if (isRaglan) document.getElementById('numpad-instruction').innerText = "着丈 / 身幅 / 裄丈";
-        else document.getElementById('numpad-instruction').innerText = "肩幅 / 着丈 / 身幅 / 袖丈";
+    function loadPendingPackings(){
+      showLoading("読込中..."); 
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
+      .withSuccessHandler(function(list){ 
+        hideLoading(); pendingPackingsData=list;
+        document.getElementById('pack-count-badge').innerText=list.length+"件";
+        if(!list.length){document.getElementById('pack-list').innerHTML='<div class="empty-state">ありません</div>';return;}
+        populatePackFilter(); renderPackList();
+      }).getPendingPackings(activeBatchSheet);
     }
-
+    
+    function openPackConfirmModal(c) {
+      currentPackCode = c; let item = pendingPackingsData.find(function(i){return i.code === c});
+      let brand = item ? item.brand : "";
+      document.getElementById('packConfirmBrand').innerText = brand;
+      document.getElementById('packConfirmGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>画像を読込中...</div>';
+      document.getElementById('packConfirmModal').style.display = 'flex';
+      google.script.run
+      .withFailureHandler(function(e){ document.getElementById('packConfirmGallery').innerHTML = '<div style="font-size:10px; color:red;">エラー: '+e.message+'</div>'; })
+      .withSuccessHandler(function(res){
+        if(res.error) { document.getElementById('packConfirmGallery').innerHTML = '<div style="font-size:10px; color:red;">エラー: '+res.error+'</div>'; return; }
+        let html = "";
+        if(!res.images || res.images.length === 0) { html = '<div style="font-size:10px; color:#666;">画像がありません</div>'; }
+        else {
+           res.images.forEach(function(img){
+              let src = img.url ? img.url : 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+              html += `<div class="admin-image-item"><img src="${src}" class="admin-image-img" onclick="showFullImage(event, '${src}')"></div>`;
+           });
+        }
+        document.getElementById('packConfirmGallery').innerHTML = html;
+      }).getItemImagesForAdmin(activeBatchSheet, c);
+    }
+    
     function closePackConfirmModal() { document.getElementById('packConfirmModal').style.display = 'none'; }
     function executePackPhoto() { closePackConfirmModal(); document.getElementById('packImageInput').click(); }
     
+    document.getElementById('packImageInput').addEventListener('change', async function(){ 
+      if(!this.files.length) return; 
+      showLoading("梱包写真を圧縮中..."); 
+      try {
+        let b = (await compressImage(this.files[0], 600, 0.4)).split(',')[1]; 
+        showLoading("梱包完了処理中...");
+        google.script.run
+        .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
+        .withSuccessHandler(function(res){
+          hideLoading(); document.getElementById('packImageInput').value='';
+          if(res.status === "OK") {
+            if(res.isNewlyAssigned) { document.getElementById('finalAssignedCodeText').innerText = res.finalCode; document.getElementById('finalAssignedCodeModal').style.display = 'flex'; } 
+            else alert("梱包完了しました！（既に付与済みの番号です）"); 
+            loadPendingPackings();
+          } else alert(res.error); 
+        }).savePackingPhotoAndAssignCode(currentPackCode, b, activeBatchSheet);
+      } catch(e) { hideLoading(); alert(e); } 
+    });
+
     function closeFinalAssignedCodeModal() { document.getElementById('finalAssignedCodeModal').style.display = 'none'; }
 
     let currentAdminSheet="";
@@ -738,9 +931,162 @@
       document.getElementById('adminMoveTargetBatch').innerHTML = html;
     }
 
+    function executeMoveItems() {
+      let checkedNodes = document.querySelectorAll('.admin-item-check:checked');
+      let codes = Array.from(checkedNodes).map(n => n.value); let targetSheet = document.getElementById('adminMoveTargetBatch').value;
+      if (codes.length === 0) return alert("アイテムが選択されていません"); if (!targetSheet) return alert("移動先のバッチを選択してください");
+      if (!confirm(`${codes.length}件のアイテムを\n${targetSheet}\nへ移動しますか？`)) return;
+      showLoading("移動中...");
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
+      .withSuccessHandler(function(r){
+        hideLoading();
+        if (r.startsWith("OK")) { alert("移動が完了しました！"); document.getElementById('admin-move-panel').style.display = 'none'; loadAdminList(currentAdminSheet); } 
+        else alert("エラー: " + r); 
+      }).moveItemsToBatch(currentAdminSheet, targetSheet, codes);
+    }
+
     function openBatchSettingsModal(){document.getElementById('batchSettingsModal').style.display='flex';} function closeBatchSettingsModal(){document.getElementById('batchSettingsModal').style.display='none';}
+    function submitBatchSettings(){ 
+      let p=document.getElementById('batchPrefix').value.trim(),s=parseInt(document.getElementById('batchStart').value),e=parseInt(document.getElementById('batchEnd').value),sx=document.getElementById('batchSuffix').value.trim(); 
+      if(!p||!s||!e||!sx||s>=e)return alert("入力エラー"); let n=`${p}${s}${sx}〜${p}${e}${sx}`; 
+      if(!confirm(`作成しますか？${n}`))return; closeBatchSettingsModal(); showLoading("作成中..."); 
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
+      .withSuccessHandler(function(r){
+        hideLoading();
+        if(r==="OK"){ activeBatchSheet = n; localStorage.setItem('activeBatchSheet', activeBatchSheet); loadAdminList(activeBatchSheet); } else alert(r);
+      }).saveBatchSettings({sheetName:n,prefix:p,start:s,end:e,suffix:sx}); 
+    }
+
+    function deleteCurrentBatch() {
+      if (!currentAdminSheet || currentAdminSheet === "デフォルトバッチ" || currentAdminSheet === "シート1") {
+        alert("この枠は削除できません。");
+        return;
+      }
+      if (!confirm(`本当に現在の枠「${currentAdminSheet}」を削除しますか？\n※この枠内に登録されているアイテムデータもすべて削除され、元に戻せません！`)) return;
+      
+      showLoading("枠を削除中...");
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
+      .withSuccessHandler(function(r){
+        hideLoading();
+        if(r === "OK") {
+          alert("枠を削除しました。");
+          activeBatchSheet = "";
+          localStorage.removeItem('activeBatchSheet');
+          loadAdminList(""); 
+        } else {
+          alert(r);
+        }
+      }).deleteBatch(currentAdminSheet);
+    }
+
+    function loadAdminList(target=""){
+      if (!target && activeBatchSheet) {
+          target = activeBatchSheet;
+      }
+      
+      showLoading("読込中..."); 
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); }) 
+      .withSuccessHandler(function(res){ 
+        hideLoading(); if(!res.config)return; 
+        currentAdminSheet=res.currentViewSheet; lastAdminData = res.itemMap; 
+        activeBatchSheet = currentAdminSheet; localStorage.setItem('activeBatchSheet', activeBatchSheet);
+        
+        let p="OM", st=1, sx="HG", en=0, m=currentAdminSheet.match(new RegExp("^([A-Za-z]+)(\\d+)([A-Za-z]+)〜([A-Za-z]+)(\\d+)([A-Za-z]+)$"));
+        if(m){p=m[1];st=parseInt(m[2]);sx=m[3];en=parseInt(m[5]);}
+
+        let listedCnt=0, measuredCnt=0, packedCnt=0;
+        Object.keys(res.itemMap).forEach(k => {
+          let d = res.itemMap[k];
+          if(d) {
+            listedCnt++;
+            if(d.dims || d.packStatus==="梱包完了" || d.shipStatus==="配送完了") measuredCnt++;
+            if(d.packStatus==="梱包完了" || d.shipStatus==="配送完了") packedCnt++;
+          }
+        });
+
+        let tot=0; if(en>0) tot = en - st + 1; else tot = listedCnt || 1;
+        document.getElementById('currentBatchDisplay').innerHTML = currentAdminSheet + "<br><span style='font-size:12px;'>(登録:" + listedCnt + "/" + tot + ")</span>";
+        document.getElementById('admin-sheet-tabs').innerHTML=res.allSheets.map(function(s){
+            let tabClass = s===currentAdminSheet ? 'admin-tab-active' : 'admin-tab-inactive';
+            let tabText = s===activeBatchSheet ? `[作業中] ${s}` : s;
+            return `<div class="admin-tab ${tabClass}" onclick="loadAdminList('${s}')">${tabText}</div>`
+        }).join('');
+        
+        let html='<div class="batch-grid">', shc=0;
+        let renderItm=function(c,d,idx){ 
+          let t = (d && d.thumbUrl) ? `<img src="${d.thumbUrl}" style="width:30px;height:30px;object-fit:cover;flex-shrink:0;margin-right:4px;border-radius:4px;">` : ''; 
+          let dispName = c.startsWith("TMP-") ? "未付番" : c; 
+          let chk = `<input type="checkbox" class="admin-item-check" value="${c}" onclick="event.stopPropagation(); toggleMovePanel();" style="position:absolute; top:2px; right:2px; width:14px; height:14px;">`;
+          return `${chk}<div style="display:flex;align-items:center;width:100%;height:100%; padding-left:4px; padding-right:16px;">${t}<span style="font-size:9px;font-weight:normal;line-height:1.1;">${dispName}</span></div>`; 
+        };
+        
+        let addHtml=function(c, idx){
+          let d=res.itemMap[c]; 
+          if(!d){ html+=`<div class="batch-item item-empty" style="padding-left:10px;"><div style="display:flex;align-items:center;"><span style="font-size:10px;">${c}</span></div></div>`; return; }
+          let sd=encodeURIComponent(JSON.stringify(d)).replace(new RegExp("'", "g"),"%27");
+          let hasAIError = (d.desc && d.desc.includes("※AI")); let isGenerated = !(!d.title || d.title.trim() === "" || !d.desc || d.desc.trim() === "" || hasAIError);
+          let isMeasured = (d.dims && d.dims.trim() !== ""); let isPacked = (d.packStatus === "梱包完了"); let isShipped = (d.shipStatus === "配送完了");
+          if(isShipped) shc++;
+          let modalErrReason = "";
+          let isMissingImg = (d.missingImages && d.missingImages.length > 0);
+          if(hasAIError) modalErrReason = "AIエラー発生（開いて再生成してください）"; else if(!isGenerated) modalErrReason = "文章未生成（一括生成待ち）";
+          if(isMissingImg) modalErrReason = (modalErrReason ? modalErrReason + " / " : "") + "画像欠損(" + d.missingImages.length + "枚)";
+
+          let bgClass = "item-active"; 
+          if(isPacked) bgClass = "item-packed"; else if(isMeasured) bgClass = "item-measured";
+          let borderStyle = "";
+          if (hasAIError || !isGenerated || isMissingImg) borderStyle = "border: 3px solid #d32f2f !important;"; else borderStyle = "border: 1px solid #ccc !important; opacity: 0.9;";
+          if(isShipped) borderStyle += " opacity: 0.4;";
+
+          html+=`<div class="batch-item ${bgClass}" style="${borderStyle}" onclick="openEditModal('${c}',${isPacked},'${sd}','${modalErrReason}')">${renderItm(c,d,idx)}</div>`;
+        };
+        
+        if(en>0){
+          let existingCodes = []; let tmpCodes = []; let unassignedCodes = [];
+          for(let i=st; i<=en; i++){ let c = `${p}${i}${sx}`; if (res.itemMap[c]) existingCodes.push(c); else unassignedCodes.push(c); }
+          Object.keys(res.itemMap).forEach(function(k){ if(k.startsWith("TMP-")) tmpCodes.push(k); });
+          let emptyCount = Math.max(0, unassignedCodes.length - tmpCodes.length); let emptyCodesToRender = unassignedCodes.slice(0, emptyCount);
+          let globalIdx = 1;
+          existingCodes.forEach(c => { addHtml(c, globalIdx++); }); tmpCodes.forEach(c => { addHtml(c, globalIdx++); }); emptyCodesToRender.forEach(c => { addHtml(c, globalIdx++); });
+        } else {
+          let globalIdx = 1; Object.keys(res.itemMap).forEach(function(k){ addHtml(k, globalIdx++); });
+        }
+        
+        document.getElementById('admin-list').innerHTML=html+'</div>'+(shc>0?`<div style="margin-top:20px;text-align:center;color:#888;font-size:12px;font-weight:normal;">配送完了：${shc}件</div>`:'');
+        updateMoveTargetDropdown(res.allSheets); toggleMovePanel();
+      }).getAdminData(target);
+    }
 
     let currentEditCode="";
+    function openEditModal(c,isP,ds,errReason){ 
+      currentEditCode=c; let d=JSON.parse(decodeURIComponent(ds)); 
+      document.getElementById('editOldCodeDisplay').innerText = c.startsWith("TMP-") ? "未付番" : c; 
+      document.getElementById('editOldCodeInput').value=c; document.getElementById('editNewCodeInput').value=""; 
+      if(errReason && errReason !== "undefined" && errReason !== "") {
+        document.getElementById('editErrorReason').style.display = 'block'; document.getElementById('editErrorReason').innerText = "エラー/通知： " + errReason;
+      } else document.getElementById('editErrorReason').style.display = 'none';
+      
+      let thumb = (d && d.thumbUrl) ? d.thumbUrl : '';
+      document.getElementById('editItemImage').src=thumb; document.getElementById('editItemImage').style.display=thumb?'block':'none'; 
+      document.getElementById('editItemStatus').value= (d && d.statusText) ? d.statusText : "目立った傷や汚れなし";
+      document.getElementById('editTextTitle').value= (d && d.title) ? d.title : ""; 
+      document.getElementById('editTextDesc').value= (d && d.desc) ? d.desc : ""; 
+      document.getElementById('editTextDims').value= (d && d.dims) ? d.dims : ""; 
+      document.getElementById('revertPackBtn').style.display = isP ? 'block' : 'none';
+      document.getElementById('editCodeModal').style.display='flex'; 
+
+      document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>画像を取得中...</div>';
+      google.script.run
+      .withFailureHandler(function(e){ document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:red;">エラー: '+e.message+'</div>'; })
+      .withSuccessHandler(function(res){
+        if(res.error) { document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:red;">エラー: '+res.error+'</div>'; return; }
+        renderAdminImages(res.images);
+      }).getItemImagesForAdmin(currentAdminSheet, c);
+    }
 
     let adminSortableInstance = null;
 
@@ -772,17 +1118,226 @@
       }
     }
 
+    function saveImageOrder() {
+      let items = document.querySelectorAll('#adminImageGallery .admin-image-item');
+      let newOrder = Array.from(items).map(item => item.getAttribute('data-name'));
+      
+      document.getElementById('editErrorReason').style.display = 'block';
+      document.getElementById('editErrorReason').innerText = "画像を並び替え中...";
+      
+      google.script.run
+        .withFailureHandler(function(e){ alert("並び替えエラー: " + e.message); })
+        .withSuccessHandler(function(r){
+           if(r==="OK"){
+             document.getElementById('editErrorReason').innerText = "画像の並び順を保存しました！";
+             setTimeout(() => { document.getElementById('editErrorReason').style.display = 'none'; }, 2000);
+           } else { alert(r); }
+        }).reorderItemImages(currentAdminSheet, currentEditCode, newOrder);
+    }
+
+    async function executeBulkReplaceImages(input) {
+      if(!input.files || input.files.length === 0) return;
+      if(!confirm("現在の【商品画像】をすべて削除し、選択した画像で上書きします。\nよろしいですか？\n（※梱包写真は削除されません）")) { input.value = ""; return; }
+      
+      showLoading("画像を圧縮して送信中...");
+      try {
+        const compressedResults = await Promise.all( Array.from(input.files).map(file => compressImage(file)) );
+        let base64Images = compressedResults.map(c => ({ mimeType: 'image/jpeg', data: c.split(',')[1] }));
+        
+        google.script.run
+        .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); input.value = ""; })
+        .withSuccessHandler(function(r){
+          input.value = ""; hideLoading();
+          if(r === "OK") {
+            alert("画像の一括入れ替えが完了しました！");
+            document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>更新中...</div>';
+            google.script.run.withSuccessHandler(res => renderAdminImages(res.images)).getItemImagesForAdmin(currentAdminSheet, currentEditCode);
+          } else { alert(r); }
+        }).replaceItemImages(currentAdminSheet, currentEditCode, base64Images);
+      } catch(e) { hideLoading(); input.value = ""; alert(e.message); }
+    }
+
+    function deleteAdminImageExecute(imgName) {
+      if(!confirm("この画像を削除しますか？")) return;
+      showLoading("削除中...");
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
+      .withSuccessHandler(function(r){
+        hideLoading();
+        if(r === "OK") {
+          document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>更新中...</div>';
+          google.script.run.withSuccessHandler(res => renderAdminImages(res.images)).getItemImagesForAdmin(currentAdminSheet, currentEditCode);
+        } else alert(r);
+      }).deleteAdminImage(currentAdminSheet, currentEditCode, imgName);
+    }
+
+    async function uploadExtraImagesAdmin(input) {
+      if(!input.files || input.files.length === 0) return;
+      showLoading("画像を圧縮して送信中...");
+      try {
+        const compressedResults = await Promise.all( Array.from(input.files).map(file => compressImage(file)) );
+        let base64Images = compressedResults.map(c => ({ mimeType: 'image/jpeg', data: c.split(',')[1] }));
+        
+        google.script.run
+        .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
+        .withSuccessHandler(function(r){
+          hideLoading(); input.value = "";
+          if(r === "OK") {
+            document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>更新中...</div>';
+            google.script.run.withSuccessHandler(res => renderAdminImages(res.images)).getItemImagesForAdmin(currentAdminSheet, currentEditCode);
+          } else alert(r);
+        }).addAdminImages(currentAdminSheet, currentEditCode, base64Images);
+      } catch(e) { hideLoading(); alert(e.message); }
+    }
+
     function closeEditModal(){document.getElementById('editCodeModal').style.display='none';}
+    
+    function saveTextEdits(){ 
+      if(!confirm("保存しますか？"))return; 
+      closeEditModal(); showLoading("保存中..."); 
+      let newStatus = document.getElementById('editItemStatus').value;
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
+      .withSuccessHandler(function(r){hideLoading();if(r==="OK")loadAdminList(currentAdminSheet);else alert(r);})
+      .updateItemTextData(currentAdminSheet,currentEditCode,document.getElementById('editTextTitle').value,document.getElementById('editTextDesc').value,document.getElementById('editTextDims').value,newStatus); 
+    }
+
+    function executeRetryAI(){ 
+      if(!confirm("AI再生成しますか？\n※選択中の「商品の状態」を反映して文章を上書きします"))return; 
+      showLoading("AIで文章を再生成中..."); 
+      let newStatus = document.getElementById('editItemStatus').value;
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
+      .withSuccessHandler(function(res){
+        hideLoading();
+        if(res && res.title && res.desc){
+          document.getElementById('editTextTitle').value = res.title;
+          document.getElementById('editTextDesc').value = res.desc;
+          document.getElementById('editErrorReason').style.display = 'block';
+          document.getElementById('editErrorReason').innerText = "再生成が完了し、即時反映しました！";
+          setTimeout(() => { document.getElementById('editErrorReason').style.display = 'none'; }, 3000);
+          loadAdminList(currentAdminSheet); 
+        } else { 
+          alert(res.error || "不明なエラーが発生しました。"); 
+        }
+      }).retryAIGeneration(currentAdminSheet, currentEditCode, newStatus); 
+    }
+
+    function submitCodeEdit(){ let o=document.getElementById('editOldCodeInput').value,n=document.getElementById('editNewCodeInput').value.trim().toUpperCase(); if(!n||o===n||!confirm("修正しますか？"))return; closeEditModal(); showLoading("修正中..."); google.script.run.withFailureHandler(function(e){hideLoading();alert(e.message);}).withSuccessHandler(function(r){hideLoading();if(r==="OK")loadAdminList(currentAdminSheet);else alert(r);}).fixManagementCode(currentAdminSheet,o,n); }
+    function deleteItemExecute(){ if(!confirm("削除しますか？"))return; closeEditModal(); showLoading("削除中..."); google.script.run.withFailureHandler(function(e){hideLoading();alert(e.message);}).withSuccessHandler(function(r){hideLoading();if(r==="OK")loadAdminList(currentAdminSheet);else alert(r);}).deleteItemData(currentAdminSheet,currentEditCode); }
+
+    function revertPackExecute() {
+      if(!confirm("梱包ステータスを未梱包に戻し、梱包写真を削除しますか？")) return;
+      closeEditModal(); showLoading("戻し中...");
+      google.script.run
+      .withFailureHandler(function(e){ hideLoading(); alert("通信エラー: " + e.message); })
+      .withSuccessHandler(function(r){
+        hideLoading(); if(r === "OK") loadAdminList(currentAdminSheet); else alert(r);
+      }).revertPackingStatus(currentAdminSheet, currentEditCode);
+    }
 
     function openIncentiveModal() { document.getElementById('incentiveModal').style.display = 'flex'; if (document.getElementById('incentiveList').innerHTML.includes('集計する')) { loadIncentiveData(); } }
     function closeIncentiveModal() { document.getElementById('incentiveModal').style.display = 'none'; }
     function toggleCustomDates() { let val = document.getElementById('incentivePeriod').value; document.getElementById('customDateContainer').style.display = (val === 'custom') ? 'flex' : 'none'; }
 
+    function loadIncentiveData() {
+      let period = document.getElementById('incentivePeriod').value; let customStart = document.getElementById('customStartDate').value; let customEnd = document.getElementById('customEndDate').value;
+      if (period === 'custom' && (!customStart || !customEnd)) { alert('開始日と終了日を指定してください'); return; }
+      document.getElementById('incentiveList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;"><span class="mini-spinner"></span>データ取得中...<br><span style="font-size:10px;">(※件数が多いと数十秒かかる場合があります)</span></div>';
+      document.getElementById('totalIncentiveAmount').innerText = '計算中...'; document.getElementById('totalSalesAmount').innerText = '¥0'; document.getElementById('totalSalesCount').innerText = '0';
+      
+      google.script.run
+      .withFailureHandler(function(e){ document.getElementById('incentiveList').innerHTML = '<div style="color:red; padding:20px;">通信エラー: '+e.message+'</div>'; })
+      .withSuccessHandler(function(res) {
+        if (res.error) {
+          document.getElementById('incentiveList').innerHTML = `<div style="color:red; text-align:center; padding:20px;">エラー: ${res.error}</div>`; document.getElementById('totalIncentiveAmount').innerText = '¥0'; return;
+        }
+        let totalIncentive = 0; let totalSales = 0; let html = '';
+        if (!res.data || res.data.length === 0) { html = '<div style="text-align:center; padding:20px; color:#888;">指定期間の売上データはありません</div>'; }
+        else {
+          res.data.forEach(item => {
+            totalIncentive += item.incentive; totalSales += item.price;
+            html += `<div style="display:flex; padding:8px 0; border-bottom:1px solid #f5f5f7; align-items:center;">
+                       <div style="flex:2; font-weight:normal; color:#333;">${item.code}<div style="font-size:9px; color:#888; font-weight:normal;">${item.dateStr}</div></div>
+                       <div style="flex:1; text-align:right; font-family:monospace; font-size:13px;">¥${item.price.toLocaleString()}</div>
+                       <div style="flex:1; text-align:right; font-family:monospace; font-size:13px; font-weight:normal; color:#d32f2f;">¥${item.incentive.toLocaleString()}</div>
+                     </div>`;
+          });
+        }
+        document.getElementById('incentiveList').innerHTML = html;
+        document.getElementById('totalIncentiveAmount').innerText = `¥${totalIncentive.toLocaleString()}`; document.getElementById('totalSalesAmount').innerText = `¥${totalSales.toLocaleString()}`; document.getElementById('totalSalesCount').innerText = res.data ? res.data.length : 0;
+      }).fetchIncentiveData(period, customStart, customEnd);
+    }
+
     let isBulkAILogicRunning = false;
+
+    async function executeBulkAI() {
+      if(!lastAdminData) return;
+      let targets = [];
+      Object.keys(lastAdminData).forEach(function(k) {
+        let d = lastAdminData[k]; if(!d) return;
+        let needsAI = (!d.title || d.title.trim() === "" || !d.desc || d.desc.trim() === "" || d.desc.includes("※AIエラー"));
+        if(needsAI) targets.push(k);
+      });
+      if(targets.length === 0) { alert("生成が必要なアイテムはありません！"); return; }
+      if(!confirm(`${targets.length}件のアイテムの文章を一括生成します。\n開始しますか？`)) return;
+
+      isBulkAILogicRunning = true;
+      document.getElementById('ai-running-banner').style.display = 'flex';
+      for (let i = 0; i < targets.length; i++) {
+        if (!isBulkAILogicRunning) break; 
+        let code = targets[i];
+        document.getElementById('ai-running-banner').innerHTML = `<span class="mini-spinner"></span>一括生成中... (${i+1}/${targets.length}件目) <button onclick="stopBulkAI()" style="background:#d32f2f; color:#fff; border:1px solid #fff; padding:6px 12px; border-radius:15px; font-weight:normal; cursor:pointer; font-size:11px; margin-left:10px;">中止する</button>`;
+        try {
+          await new Promise((resolve) => {
+             google.script.run
+               .withSuccessHandler(res => resolve())
+               .withFailureHandler(err => resolve())
+               .retryAIGeneration(currentAdminSheet, code, null); 
+          });
+        } catch(e) { }
+      }
+      document.getElementById('ai-running-banner').style.display = 'none';
+      if (isBulkAILogicRunning) alert("すべての文章生成を完了しました。"); 
+      isBulkAILogicRunning = false; loadAdminList(currentAdminSheet);
+    }
 
     function stopBulkAI() {
       if(!confirm("一括生成を中止しますか？")) return;
       isBulkAILogicRunning = false; document.getElementById('ai-running-banner').innerHTML = `<span class="mini-spinner"></span>中止処理中...`;
+    }
+
+    function executeBatchDownload() {
+        if (!currentAdminSheet) return;
+        showLoading("サーバー経由でZIPデータを準備中...\n(※画像が多いと数分かかる場合があります)");
+        
+        google.script.run
+        .withFailureHandler(function(e) { hideLoading(); alert("通信エラー: " + e.message); })
+        .withSuccessHandler(async function(res) {
+            try {
+                const zip = new JSZip();
+                const dateStr = new Date().toISOString().replace(new RegExp("[-:T]", "g"), '').slice(0, 14);
+                zip.file(`mercari_${currentAdminSheet}_${dateStr}.csv`, res.csvString);
+                
+                const imgFolder = zip.folder("images");
+                
+                if(res.images && res.images.length > 0) {
+                    res.images.forEach(img => {
+                       if(img.data && img.data !== "") {
+                           imgFolder.file(img.name, img.data, {base64: true});
+                       }
+                    });
+                }
+                
+                document.getElementById('loadingText').innerText = "ZIPファイルをPCに保存中...";
+                const zipBlob = await zip.generateAsync({ type: "blob" });
+                saveAs(zipBlob, `${currentAdminSheet}_export.zip`);
+                hideLoading();
+            } catch (err) {
+                hideLoading();
+                alert("ZIP生成エラー: " + err.message);
+            }
+        }).getBatchDownloadData(currentAdminSheet);
     }
 
     const rawCategories = [
