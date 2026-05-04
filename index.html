@@ -11,6 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&display=swap" rel="stylesheet">
   
+  <!-- ★削除してしまったR2（AWS S3）通信用のライブラリを復活させました -->
+  <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1438.0.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
@@ -24,7 +26,7 @@
     .main-buttons-container { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 0; padding: 0 10px; }
     .home-icon-main { width: 40px; height: 40px; object-fit: contain; flex-shrink: 0; }
     
-    .home-action-btn { width: 100%; flex-grow: 0; height: 64px; border-radius: 12px; border: 2px solid #111; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-direction: row; gap: 8px; font-family: 'Dela Gothic One', sans-serif; font-size: 19px; font-weight: normal; color: #111; padding: 0 10px; text-align: center; letter-spacing: 0.5px; }
+    .home-action-btn { width: 100%; flex-grow: 0; height: 64px; border-radius: 12px; border: 2px solid #111; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-direction: row; gap: 8px; transition: 0.1s; font-family: 'Dela Gothic One', sans-serif; font-size: 19px; font-weight: normal; color: #111; padding: 0 10px; text-align: center; letter-spacing: 0.5px; }
     .home-action-btn * { pointer-events: none; }
     .home-action-btn:active { opacity: 0.7; transform: scale(0.98); }
     
@@ -56,8 +58,8 @@
     label.title{font-weight:normal;font-size:14px;display:block;margin-bottom:4px;}
     .required{color:#d32f2f;font-size:12px;margin-left:3px;}
     
-    /* ★ピクつき防止：transitionを削除し、サイズを完全固定化 */
-    input[type="text"],input[type="number"],input[type="date"],select,input[type="file"],textarea{width:100%;padding:8px 10px;background:#f9f9f9;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;font-size:16px;margin-bottom:4px;-webkit-appearance:none; height:auto; line-height:normal;}
+    /* テンキーピクつき防止の固定サイズ化 */
+    input[type="text"],input[type="number"],input[type="date"],select,input[type="file"],textarea{width:100%;padding:8px 10px;background:#f9f9f9;border:1px solid #ddd;border-radius:6px;font-size:16px;margin-bottom:4px;-webkit-appearance:none; height:auto; line-height:normal;}
     input:focus,select:focus,textarea:focus{background:#fff;border-color:#111;outline:none;}
     .is-filled{background:#fafafa!important;border-color:#999!important;}
     
@@ -500,6 +502,21 @@
       }
     }
 
+    // ★追加: R2(AWS S3)の初期化
+    const R2_ACCOUNT_ID = 'a73ad889c944b152ede6d3329c545f8c';
+    const R2_ACCESS_KEY = '92d4bcff0e4c138bdbcb0d4def85d114';
+    const R2_SECRET_KEY = 'c0710a593132682ac557ab21b0c973974c0956ab49cb8d28a57aa67b7bc7c395';
+    const BUCKET_NAME = 'mercari-images'; 
+    const PUBLIC_URL = 'https://pub-8e4386156d26427f861486afe0381fb4.r2.dev'; 
+
+    AWS.config.update({
+        accessKeyId: R2_ACCESS_KEY,
+        secretAccessKey: R2_SECRET_KEY,
+        region: 'auto',
+        endpoint: new AWS.Endpoint(`https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`)
+    });
+    const s3 = new AWS.S3({ signatureVersion: 'v4' });
+
     let lastAdminData = null; 
     let activeBatchSheet = localStorage.getItem('activeBatchSheet') || "";
 
@@ -618,7 +635,7 @@
       document.getElementById('imagePreviewModal').style.display = 'flex';
     }
 
-    // ★重要: テンキー動作（スマホでのピクつきを防止するため focus() を完全に削除）
+    // テンキー動作（スマホでのピクつきを防止するためfocus削除）
     function insertAtCursor(val) {
         let el = document.getElementById('numpadInput'); let start = el.selectionStart; let end = el.selectionEnd; let text = el.value;
         el.value = text.substring(0, start) + val + text.substring(end);
@@ -718,6 +735,7 @@
 
     let pendingUploadData=null; 
     
+    // ★追加: R2へのアップロードを復活
     async function startSubmissionProcess(){
       if(isUploadingBackground){alert("前の処理をお待ちください");return;}
       let b=document.getElementById('brand').value.trim(); let s=document.getElementById('statusText').value;
@@ -726,21 +744,33 @@
       if(capturedBlobs.length === 0 || !b || !sz || !cId){alert("必須項目が未入力、または写真がありません");return;}
       
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      showLoading("サーバー経由で通信準備中...");
+      showLoading("R2へ画像を直接送信中...");
 
       try {
         const res = await rpcCall('reserveNewCode', activeBatchSheet);
-        
         let targetCode = res.code; 
 
-        // 全ての画像をBase64文字列化
-        let base64Images = await Promise.all(capturedBlobs.map(async (item) => {
-            return new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve({ mimeType: 'image/jpeg', data: reader.result.split(',')[1] });
-                reader.readAsDataURL(item.blob);
-            });
-        }));
+        // R2(S3)へアップロード
+        let uploadErrors = 0;
+        for (let i = 0; i < capturedBlobs.length; i++) {
+            const fileName = `${targetCode}-${i + 1}.jpg`;
+            const params = { Bucket: BUCKET_NAME, Key: fileName, Body: capturedBlobs[i].blob, ContentType: 'image/jpeg' };
+            try { await s3.putObject(params).promise(); } catch (err) { uploadErrors++; console.error("R2 Upload Error:", err); }
+        }
+        
+        if (uploadErrors > 0) alert(`${uploadErrors}枚の画像送信に失敗しました。`);
+
+        // AI分析用に1枚目だけBase64化する（バックエンドの処理を軽くするため）
+        const aiThumbBase64 = await new Promise(resolve => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result.split(',')[1]);
+            reader.readAsDataURL(capturedBlobs[0].blob);
+        });
+
+        let dummyImages = capturedBlobs.map((blob, idx) => {
+            if (idx === 0) return { mimeType: 'image/jpeg', data: aiThumbBase64 };
+            return { mimeType: 'image/jpeg', data: "DUMMY" }; 
+        });
 
         let rMat = document.querySelector('input[name="materialRadio"]:checked'); let mat = rMat ? rMat.value : '';
         if(mat==='その他')mat=document.getElementById('materialOther').value.trim();
@@ -748,7 +778,7 @@
         pendingUploadData = {
           code: targetCode, brand: b, brandId: document.getElementById('brandId').value, keywords: document.getElementById('freeKeywords').value.trim(),
           materialText: mat||"", statusText: s, sizeInput: sz, categoryId: cId, categoryText: document.getElementById('finalCategoryText').value,
-          images: base64Images, thumbData: ""
+          images: dummyImages, thumbData: ""
         };
         
         hideLoading(); 
@@ -943,21 +973,38 @@
     function closePackConfirmModal() { document.getElementById('packConfirmModal').style.display = 'none'; }
     function executePackPhoto() { closePackConfirmModal(); document.getElementById('packImageInput').click(); }
     
+    // ★追加: 梱包写真のR2へのアップロードを復活
     document.getElementById('packImageInput').addEventListener('change', async function(){ 
       if(!this.files.length) return; 
       showLoading("梱包写真を圧縮中..."); 
       try {
-        let b = (await compressImage(this.files[0], 600, 0.4)).split(',')[1]; 
+        let dataUrl = await compressImage(this.files[0], 600, 0.4); 
+        const blob = await (await fetch(dataUrl)).blob();
+
         showLoading("梱包完了処理中...");
         
-        const res = await rpcCall('savePackingPhotoAndAssignCode', currentPackCode, b, activeBatchSheet);
-        hideLoading(); document.getElementById('packImageInput').value='';
-        if(res.status === "OK") {
-          if(res.isNewlyAssigned) { document.getElementById('finalAssignedCodeText').innerText = res.finalCode; document.getElementById('finalAssignedCodeModal').style.display = 'flex'; } 
-          else alert("梱包完了しました！（既に付与済みの番号です）"); 
-          loadPendingPackings();
-        } else alert(res.error); 
+        // 1. 番号を確定させる
+        const res = await rpcCall('savePackingPhotoAndAssignCode', currentPackCode, "DUMMY", activeBatchSheet);
         
+        if(res.status === "OK") {
+           // 2. 確定した番号でR2へアップロード
+           showLoading("R2へアップロード中...");
+           const fileName = `${res.finalCode}_packing.jpg`;
+           const params = { Bucket: BUCKET_NAME, Key: fileName, Body: blob, ContentType: 'image/jpeg' };
+           await s3.putObject(params).promise();
+
+           hideLoading(); document.getElementById('packImageInput').value='';
+           
+           if(res.isNewlyAssigned) { 
+               document.getElementById('finalAssignedCodeText').innerText = res.finalCode; 
+               document.getElementById('finalAssignedCodeModal').style.display = 'flex'; 
+           } else {
+               alert("梱包完了しました！（既に付与済みの番号です）"); 
+           }
+           loadPendingPackings();
+        } else {
+           hideLoading(); alert(res.error);
+        }
       } catch(e) { hideLoading(); alert(e); } 
     });
 
@@ -1204,6 +1251,7 @@
       }
     }
 
+    // ★追加: R2への一括アップロードを復活
     async function executeBulkReplaceImages(input) {
       if(!input.files || input.files.length === 0) return;
       if(!confirm("現在の【商品画像】をすべて削除し、選択した画像で上書きします。\nよろしいですか？\n（※梱包写真は削除されません）")) { input.value = ""; return; }
@@ -1211,7 +1259,18 @@
       showLoading("画像を圧縮して送信中...");
       try {
         const compressedResults = await Promise.all( Array.from(input.files).map(file => compressImage(file)) );
-        let base64Images = compressedResults.map(c => ({ mimeType: 'image/jpeg', data: c.split(',')[1] }));
+        
+        showLoading("R2へアップロード中...");
+        let uploadErrors = 0;
+        for (let i = 0; i < compressedResults.length; i++) {
+            const blob = await (await fetch(compressedResults[i])).blob();
+            const fileName = `${currentEditCode}-${i + 1}.jpg`;
+            const params = { Bucket: BUCKET_NAME, Key: fileName, Body: blob, ContentType: 'image/jpeg' };
+            try { await s3.putObject(params).promise(); } catch (err) { uploadErrors++; }
+        }
+        if (uploadErrors > 0) alert(`${uploadErrors}枚の画像送信に失敗しました。`);
+
+        let base64Images = compressedResults.map(c => ({ mimeType: 'image/jpeg', data: "DUMMY" }));
         
         const r = await rpcCall('replaceItemImages', currentAdminSheet, currentEditCode, base64Images);
         input.value = ""; hideLoading();
@@ -1240,12 +1299,26 @@
       }
     }
 
+    // ★追加: R2への追加アップロードを復活
     async function uploadExtraImagesAdmin(input) {
       if(!input.files || input.files.length === 0) return;
       showLoading("画像を圧縮して送信中...");
       try {
         const compressedResults = await Promise.all( Array.from(input.files).map(file => compressImage(file)) );
-        let base64Images = compressedResults.map(c => ({ mimeType: 'image/jpeg', data: c.split(',')[1] }));
+        showLoading("R2へアップロード中...");
+        
+        let existingImgCount = document.querySelectorAll('#adminImageGallery .admin-image-item').length;
+        let uploadErrors = 0;
+        
+        for (let i = 0; i < compressedResults.length; i++) {
+            const blob = await (await fetch(compressedResults[i])).blob();
+            const fileName = `${currentEditCode}-${existingImgCount + i + 1}.jpg`;
+            const params = { Bucket: BUCKET_NAME, Key: fileName, Body: blob, ContentType: 'image/jpeg' };
+            try { await s3.putObject(params).promise(); } catch (err) { uploadErrors++; }
+        }
+        if (uploadErrors > 0) alert(`${uploadErrors}枚の画像送信に失敗しました。`);
+
+        let base64Images = compressedResults.map(c => ({ mimeType: 'image/jpeg', data: "DUMMY" }));
         
         const r = await rpcCall('addAdminImages', currentAdminSheet, currentEditCode, base64Images);
         hideLoading(); input.value = "";
