@@ -199,76 +199,57 @@ async def rpc_endpoint(req: Request):
     args = payload.get("args", [])
     
     try:
-        # 1. ★修正：バッチ作成時にGASへ通信してドライブにフォルダを作る
         if method == "saveBatchSettings":
             d = args[0]
             save_batch_settings(d)
-            
-            # GASへ「フォルダ作って！」と命令を送る
             sheetName = d.get("sheetName")
             try:
                 gas_payload = {"method": "setupNewBatch", "sheetName": sheetName}
                 requests.post(GAS_API_URL, json=gas_payload, timeout=10)
             except Exception as e:
                 print(f"GAS folder creation error: {e}")
-                
             return {"data": "OK"}
 
-        # 2. 空き枠の確認
         elif method == "checkBatchFull":
             targetSheetName = args[0] if args and args[0] else None
             config = get_batch_settings()
             sheetName = targetSheetName if targetSheetName else config.get("sheetName", "シート1")
-            
             start = int(config.get("start", 10000))
             end = int(config.get("end", 19999))
-            
             norm_sheet = normalize_str(sheetName)
             m = re.match(r'^([A-Za-z]+)(\d+)([A-Za-z]+)[〜～\-]+([A-Za-z]+)(\d+)([A-Za-z]+)$', norm_sheet)
             if m:
                 start = int(m.group(2))
                 end = int(m.group(5))
-                
             maxItems = end - start + 1
-            
             res = supabase.table("mercari_items").select("item_code").eq("batch_name", sheetName).execute()
             valid_items = [r for r in res.data if r["item_code"] != "SYSTEM_SETTINGS" and not str(r["item_code"]).startswith("BATCH-")]
             currentItems = len(valid_items)
-            
             return {"data": currentItems >= maxItems}
 
-        # 3. 新規出品用の仮番号発行
         elif method == "reserveNewCode":
             targetSheetName = args[0] if args and args[0] else None
             config = get_batch_settings()
             sheetName = targetSheetName if targetSheetName else config.get("sheetName", "シート1")
-            
             if not sheetName:
                 return {"data": {"code": None, "error": "対象のタブが存在しません。管理画面から設定してください。"}}
-                
             start = int(config.get("start", 10000))
             end = int(config.get("end", 19999))
-            
             norm_sheet = normalize_str(sheetName)
             m = re.match(r'^([A-Za-z]+)(\d+)([A-Za-z]+)[〜～\-]+([A-Za-z]+)(\d+)([A-Za-z]+)$', norm_sheet)
             if m:
                 start = int(m.group(2))
                 end = int(m.group(5))
-                
             maxItems = end - start + 1
-            
             res = supabase.table("mercari_items").select("item_code").eq("batch_name", sheetName).execute()
             valid_items = [r for r in res.data if r["item_code"] != "SYSTEM_SETTINGS" and not str(r["item_code"]).startswith("BATCH-")]
             currentItems = len(valid_items)
-            
             if currentItems >= maxItems:
                 return {"data": {"code": None, "error": "設定の上限数を超えているため新たに枠を作ってください"}}
-                
             tempCode = f"TMP-{int(time.time() * 1000)}"
             count = currentItems + 2
             return {"data": {"code": tempCode, "displayCount": count, "error": None}}
             
-        # 4. ブランド一覧（GASから直接取得）
         elif method == "getBrandList":
             try:
                 response = requests.get(f"{GAS_API_URL}?method=getBrandList")
@@ -279,14 +260,12 @@ async def rpc_endpoint(req: Request):
                 print(f"Brand list fetch error: {e}")
                 return {"data": []}
             
-        # 5. 新規出品のAI生成と保存
         elif method == "processHeavyData":
             code = args[0]
             d = args[1]
             targetSheetName = args[2] if len(args) > 2 and args[2] else None
             config = get_batch_settings()
             sheetName = targetSheetName if targetSheetName else config.get("sheetName", "シート1")
-            
             b64 = d["images"][0]["data"] if d.get("images") and d["images"][0]["data"] != "DUMMY" else ""
             
             ai_data = {}
@@ -315,7 +294,7 @@ async def rpc_endpoint(req: Request):
             
             return {"data": {"code": code, "error": None}}
 
-        # 6. 未採寸リストの取得
+        # ★修正：TMP強制判定を削除し、説明文だけで判定
         elif method == "getPendingMeasurements":
             targetSheetName = args[0] if args and args[0] else None
             config = get_batch_settings()
@@ -328,7 +307,9 @@ async def rpc_endpoint(req: Request):
             for r in res.data:
                 c = str(r.get("item_code", ""))
                 if c == "SYSTEM_SETTINGS" or c.startswith("BATCH-"): continue
-                if c.startswith("TMP-") or "【寸法データ未入力" in str(r.get("description", "")):
+                
+                desc = str(r.get("description", ""))
+                if "【寸法データ未入力" in desc:
                     img = r.get("images", [])
                     thumb = img[0] if img else ""
                     items.append({
@@ -338,7 +319,6 @@ async def rpc_endpoint(req: Request):
                     })
             return {"data": items}
             
-        # 7. 採寸データの保存
         elif method == "saveMeasurement":
             code = args[0]
             dims = args[1]
@@ -361,14 +341,19 @@ async def rpc_endpoint(req: Request):
             else:
                 formatted = f"肩幅：{d_arr[0] if len(d_arr)>0 else ''}cm\n着丈：{d_arr[1] if len(d_arr)>1 else ''}cm\n身幅：{d_arr[2] if len(d_arr)>2 else ''}cm\n袖丈：{d_arr[3] if len(d_arr)>3 else ''}cm"
                 
-            new_desc = old_desc.replace("【寸法データ未入力（後ほど計測します）】", formatted)
+            new_desc = re.sub(r'【寸法データ未入力.*?】', formatted, old_desc)
             if old_desc == new_desc:
-                new_desc = f"【実寸サイズ】\n{formatted}\n\n{old_desc}"
+                old_desc_cleaned = old_desc.replace("【寸法データ未入力（後ほど計測します）】", "")
+                new_desc = f"【実寸サイズ】\n{formatted}\n\n{old_desc_cleaned}"
                 
-            supabase.table("mercari_items").update({"description": new_desc}).eq("item_code", code).execute()
+            update_payload = {"description": new_desc}
+            if "dims" in target:
+                update_payload["dims"] = dims
+                
+            supabase.table("mercari_items").update(update_payload).eq("item_code", code).execute()
             return {"data": "OK"}
             
-        # 8. 未梱包リストの取得
+        # ★修正：TMP判定を除去し、採寸済みの未梱包だけを取得
         elif method == "getPendingPackings":
             targetSheetName = args[0] if args and args[0] else None
             config = get_batch_settings()
@@ -381,7 +366,9 @@ async def rpc_endpoint(req: Request):
             for r in res.data:
                 c = str(r.get("item_code", ""))
                 if c == "SYSTEM_SETTINGS" or c.startswith("BATCH-"): continue
-                if not c.startswith("TMP-") and "【寸法データ未入力" not in str(r.get("description", "")):
+                
+                desc = str(r.get("description", ""))
+                if "【寸法データ未入力" not in desc:
                     img = r.get("images", [])
                     thumb = img[0] if img else ""
                     items.append({
@@ -391,7 +378,6 @@ async def rpc_endpoint(req: Request):
                     })
             return {"data": items}
             
-        # 9. 梱包画像の保存とOM番号の正式付与
         elif method == "savePackingPhotoAndAssignCode":
             code = args[0]
             targetSheetName = args[2] if len(args) > 2 and args[2] else None
@@ -420,7 +406,6 @@ async def rpc_endpoint(req: Request):
             
             return {"data": {"status": "OK", "finalCode": final_code, "isNewlyAssigned": is_new}}
 
-        # 10. ダッシュボード管理データの取得
         elif method == "getAdminData":
             targetSheetName = args[0] if args and args[0] else None
             config = get_batch_settings()
@@ -471,7 +456,6 @@ async def rpc_endpoint(req: Request):
                 "currentViewSheet": sheetNameToLoad
             }}
 
-        # 11. CSV＆ZIP一括ダウンロード用データの構築
         elif method == "getBatchDownloadData":
             targetSheetName = args[0] if args and args[0] else None
             config = get_batch_settings()
@@ -506,7 +490,6 @@ async def rpc_endpoint(req: Request):
                 
             return {"data": {"csvString": output.getvalue(), "images": images_to_download}}
 
-        # 12. 画像一覧の取得
         elif method == "getItemImagesForAdmin":
             code = args[1]
             res = supabase.table("mercari_items").select("images").eq("item_code", code).execute()
@@ -516,7 +499,6 @@ async def rpc_endpoint(req: Request):
                     if img: images.append({"name": str(img), "url": f"{PUBLIC_URL}/{img}"})
             return {"data": {"images": images}}
 
-        # 13. 管理画面からの画像削除
         elif method == "deleteAdminImage":
             sheetName = args[0]
             code = args[1]
@@ -529,7 +511,6 @@ async def rpc_endpoint(req: Request):
                     supabase.table("mercari_items").update({"images": imgs}).eq("item_code", code).execute()
             return {"data": "OK"}
 
-        # 14. 画像の追加
         elif method == "addAdminImages":
             sheetName = args[0]
             code = args[1]
@@ -543,7 +524,6 @@ async def rpc_endpoint(req: Request):
                 supabase.table("mercari_items").update({"images": imgs}).eq("item_code", code).execute()
             return {"data": "OK"}
 
-        # 15. 画像の一括入れ替え
         elif method == "replaceItemImages":
             sheetName = args[0]
             itemCode = args[1]
@@ -552,7 +532,6 @@ async def rpc_endpoint(req: Request):
             supabase.table("mercari_items").update({"images": new_imgs}).eq("item_code", itemCode).execute()
             return {"data": "OK"}
 
-        # 16. テキストデータの更新
         elif method == "updateItemTextData":
             code = args[1]
             supabase.table("mercari_items").update({
@@ -560,7 +539,6 @@ async def rpc_endpoint(req: Request):
             }).eq("item_code", code).execute()
             return {"data": "OK"}
             
-        # 17. AI再生成（エラー通知と即時反映）
         elif method == "retryAIGeneration":
             code = args[1]
             new_status = args[2]
@@ -598,7 +576,6 @@ async def rpc_endpoint(req: Request):
                     return {"error": "アイテムに画像が登録されていないため再生成できません。"}
             return {"error": "対象のアイテムがデータベースに見つかりません。"}
 
-        # 18. 管理番号の強制修正
         elif method == "fixManagementCode":
             old_code = args[1]
             new_code = args[2]
@@ -612,13 +589,11 @@ async def rpc_endpoint(req: Request):
                 }).eq("item_code", old_code).execute()
             return {"data": "OK"}
 
-        # 19. 梱包状態を未梱包に戻す
         elif method == "revertPackingStatus":
             code = args[1]
             supabase.table("mercari_items").update({"pack_status": ""}).eq("item_code", code).execute()
             return {"data": "OK"}
 
-        # 20. アイテムのバッチ移動
         elif method == "moveItemsToBatch":
             target_batch = args[1]
             codes = args[2]
@@ -626,17 +601,14 @@ async def rpc_endpoint(req: Request):
                 supabase.table("mercari_items").update({"batch_name": target_batch}).eq("item_code", c).execute()
             return {"data": "OK"}
 
-        # 21. インセンティブ集計
         elif method == "fetchIncentiveData":
             return {"data": []}
 
-        # 22. アイテムの削除
         elif method == "deleteItemData":
             code = args[1]
             supabase.table("mercari_items").delete().eq("item_code", code).execute()
             return {"data": "OK"}
 
-        # 23. 現在のバッチの一括削除
         elif method == "deleteBatch":
             batch_name = args[0]
             if not batch_name or batch_name == "デフォルトバッチ":
@@ -650,7 +622,6 @@ async def rpc_endpoint(req: Request):
                 
             return {"data": "OK"}
             
-        # 24. 長押しで順番を並び替えた際、その順番通りにDBを上書きする
         elif method == "reorderItemImages":
             sheetName = args[0]
             itemCode = args[1]
