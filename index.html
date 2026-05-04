@@ -14,7 +14,6 @@
   <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1438.0.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-  <!-- スマホの長押し並び替え用ツール -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
   
   <style>
@@ -488,6 +487,16 @@
 
     let lastAdminData = null; 
 
+    // ★★★ GAS通信の変換コード（Renderへの通信を復旧） ★★★
+    const BACKEND_URL = 'https://mercari-backend-hpof.onrender.com';
+    const rpcMethods = [
+      "getBrandList", "checkBatchFull", "reserveNewCode", "processHeavyData",
+      "getPendingMeasurements", "saveMeasurement", "getPendingPackings",
+      "getItemImagesForAdmin", "savePackingPhotoAndAssignCode", "getAdminData",
+      "replaceItemImages", "deleteAdminImage", "addAdminImages", "updateItemTextData",
+      "retryAIGeneration", "fixManagementCode", "deleteItemData", "revertPackingStatus",
+      "fetchIncentiveData", "getBatchDownloadData", "moveItemsToBatch", "saveBatchSettings",
+      "deleteBatch", "reorderItemImages"
     ];
     const google = {
       script: {
@@ -532,8 +541,6 @@
     // ★カメラロジック★
     let cameraStream = null;
     let capturedBlobs = [];
-    
-    // ★出品時の並び替え用変数
     let previewSortableInstance = null;
     
     async function initCamera() {
@@ -585,7 +592,6 @@
             delay: 200,
             delayOnTouchOnly: true,
             onEnd: function (evt) {
-                // 並び替えた配列を更新
                 const newOrderIds = Array.from(list.children).map(el => el.getAttribute('data-id'));
                 let newBlobs = [];
                 newOrderIds.forEach(id => {
@@ -1055,7 +1061,7 @@
     }
 
     function deleteCurrentBatch() {
-      if (!currentAdminSheet || currentAdminSheet === "デフォルトバッチ") {
+      if (!currentAdminSheet || currentAdminSheet === "デフォルトバッチ" || currentAdminSheet === "シート1") {
         alert("この枠は削除できません。");
         return;
       }
@@ -1320,7 +1326,6 @@
       .updateItemTextData(currentAdminSheet,currentEditCode,document.getElementById('editTextTitle').value,document.getElementById('editTextDesc').value,document.getElementById('editTextDims').value,newStatus); 
     }
 
-    // ★修正：即時反映とエラー表示
     function executeRetryAI(){ 
       if(!confirm("AI再生成しますか？\n※選択中の「商品の状態」を反映して文章を上書きします"))return; 
       showLoading("AIで文章を再生成中..."); 
@@ -1332,7 +1337,9 @@
         if(res && res.title && res.desc){
           document.getElementById('editTextTitle').value = res.title;
           document.getElementById('editTextDesc').value = res.desc;
-          alert("再生成が完了し、即時反映しました！\n問題なければ左下の「保存」を押してください。"); 
+          document.getElementById('editErrorReason').style.display = 'block';
+          document.getElementById('editErrorReason').innerText = "再生成が完了し、即時反映しました！";
+          setTimeout(() => { document.getElementById('editErrorReason').style.display = 'none'; }, 3000);
           loadAdminList(currentAdminSheet); 
         } else { 
           alert(res.error || "不明なエラーが発生しました。"); 
