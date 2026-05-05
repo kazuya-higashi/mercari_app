@@ -7,9 +7,9 @@ import io
 import base64
 import requests
 import unicodedata
-import boto3 # ★R2操作用に追加
-from botocore.config import Config # ★R2操作用に追加
-from fastapi import FastAPI, Request, Response
+import boto3
+from botocore.config import Config
+from fastapi import FastAPI, Request, Response, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from supabase import create_client, Client
@@ -125,7 +125,6 @@ def assign_real_code_internal(sheetName, oldCode):
         
     return f"{prefix}{nextNum}{suffix}"
 
-# --- R2上のファイルリネーム関数 ---
 def rename_r2_files(old_code, new_code):
     try:
         response = s3_client.list_objects_v2(Bucket=BUCKET_NAME, Prefix=old_code)
@@ -173,7 +172,8 @@ def analyze_image_with_gemini(base64_img: str, keywords: str):
             return {"intro": f"※AIブロック: {json.dumps(data.get('promptFeedback', '画像が不適切と判定された可能性があります'))}"}
         
         text = data["candidates"][0]["content"]["parts"][0]["text"]
-        text = text.replace("```json", "").replace("```", "").strip()
+        text = text.replace("
+```json", "").replace("```", "").strip()
         m = re.search(r'\{.*\}', text, re.DOTALL)
         if m:
             text = m.group(0)
@@ -222,8 +222,9 @@ def build_title(data, ai_data, gender_str, code):
     return " ".join(unique)[:130]
 
 
+# --- バックエンド通信口（RPC） ---
 @app.api_route("/api/rpc", methods=["GET", "POST", "OPTIONS"])
-async def rpc_endpoint(req: Request, response: Response):
+async def rpc_endpoint(req: Request, response: Response, background_tasks: BackgroundTasks):
     if req.method == "OPTIONS":
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS"
@@ -436,7 +437,8 @@ async def rpc_endpoint(req: Request, response: Response):
                 new_title = str(target.get("title", "")).replace(code, final_code)
                 new_images = [str(img).replace(code, final_code) for img in target.get("images", [])]
                 
-                rename_r2_files(code, final_code) # ★R2のファイル名を変更
+                # ★修正: タイムアウトを防ぐため、リネームを「裏作業（BackgroundTasks）」に回し、DB更新を最優先にする
+                background_tasks.add_task(rename_r2_files, code, final_code)
                 
                 supabase.table("mercari_items").update({
                     "item_code": final_code, "title": new_title, "images": new_images, "pack_status": "梱包完了"
@@ -473,6 +475,12 @@ async def rpc_endpoint(req: Request, response: Response):
                 code = str(r["item_code"])
                 if code == "SYSTEM_SETTINGS" or code.startswith("BATCH-"): continue
                 
+                # ★自動修復ロジック：正式番号なのに「梱包ステータス」が空（エラー等で途切れたもの）を自動復旧
+                pack_status = str(r.get("pack_status", ""))
+                if not code.startswith("TMP-") and pack_status == "":
+                    pack_status = "梱包完了"
+                    supabase.table("mercari_items").update({"pack_status": "梱包完了"}).eq("item_code", code).execute()
+                
                 img = r.get("images", [])
                 thumbName = img[0] if img and isinstance(img, list) and len(img) > 0 else ""
                 desc_text = str(r.get("description", ""))
@@ -484,7 +492,7 @@ async def rpc_endpoint(req: Request, response: Response):
                     "brand": r.get("brand", "") or "ブランド不明", "statusText": r.get("status_text", ""),
                     "title": r.get("title", ""), "desc": desc_text,
                     "thumbUrl": f"{PUBLIC_URL}/{thumbName}" if thumbName else "",
-                    "packStatus": r.get("pack_status", ""), "shipStatus": "",
+                    "packStatus": pack_status, "shipStatus": "",
                     "missingImages": [], "hasMissingImage": False
                 }
                 
@@ -616,7 +624,6 @@ async def rpc_endpoint(req: Request, response: Response):
                     return {"error": "アイテムに画像が登録されていないため再生成できません。"}
             return {"error": "対象のアイテムがデータベースに見つかりません。"}
 
-        # ★追加：番号強制修正時に、R2(AWS S3)上のファイル名も変更する
         elif method == "fixManagementCode":
             old_code = args[1]
             new_code = args[2]
@@ -626,11 +633,13 @@ async def rpc_endpoint(req: Request, response: Response):
                 new_title = str(item.get("title", "")).replace(old_code, new_code)
                 new_images = [str(img).replace(old_code, new_code) for img in item.get("images", [])]
                 
-                rename_r2_files(old_code, new_code) # R2のリネーム処理を実行
-                
+                # ★ここもバックグラウンド処理に変更
                 supabase.table("mercari_items").update({
                     "item_code": new_code, "title": new_title, "images": new_images
                 }).eq("item_code", old_code).execute()
+
+                background_tasks.add_task(rename_r2_files, old_code, new_code)
+                
             return {"data": "OK"}
 
         elif method == "revertPackingStatus":
