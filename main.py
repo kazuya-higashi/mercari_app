@@ -7,6 +7,8 @@ import io
 import base64
 import requests
 import unicodedata
+import boto3 # ★R2操作用に追加
+from botocore.config import Config # ★R2操作用に追加
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -22,10 +24,23 @@ PUBLIC_URL = "https://pub-8e4386156d26427f861486afe0381fb4.r2.dev"
 SPREADSHEET_ID = '1kpKObKqse7sfcG_VByhF1uWeMRTdFYPAu4VS0eqh6PU'
 GAS_API_URL = "https://script.google.com/macros/s/AKfycbwX3CsxVEfZ1OUa5ytPkBmsElpihy6hKrm_vzW_KOlyX25Xim6jLNmW3fEflUF16B37/exec"
 
+# ★R2設定
+R2_ACCOUNT_ID = 'a73ad889c944b152ede6d3329c545f8c'
+R2_ACCESS_KEY = '92d4bcff0e4c138bdbcb0d4def85d114'
+R2_SECRET_KEY = 'c0710a593132682ac557ab21b0c973974c0956ab49cb8d28a57aa67b7bc7c395'
+BUCKET_NAME = 'mercari-images'
+
+s3_client = boto3.client(
+    's3',
+    endpoint_url=f'https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com',
+    aws_access_key_id=R2_ACCESS_KEY,
+    aws_secret_access_key=R2_SECRET_KEY,
+    config=Config(signature_version='s3v4'),
+)
+
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL else None
 app = FastAPI()
 
-# CORSの完全な許可
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -34,7 +49,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ★ブラウザの古いキャッシュを強制的に破棄させる処理
 @app.get("/")
 def read_root():
     with open("index.html", "r", encoding="utf-8") as f:
@@ -45,9 +59,6 @@ def read_root():
         "Expires": "0"
     })
 
-# ==========================================
-# 共通機能・設定管理
-# ==========================================
 def normalize_str(s):
     return unicodedata.normalize('NFKC', str(s)).strip() if s else ""
 
@@ -114,7 +125,26 @@ def assign_real_code_internal(sheetName, oldCode):
         
     return f"{prefix}{nextNum}{suffix}"
 
-# --- AI・タイトル生成ロジック ---
+# --- R2上のファイルリネーム関数 ---
+def rename_r2_files(old_code, new_code):
+    try:
+        response = s3_client.list_objects_v2(Bucket=BUCKET_NAME, Prefix=old_code)
+        if 'Contents' not in response:
+            return
+            
+        for obj in response['Contents']:
+            old_key = obj['Key']
+            new_key = old_key.replace(old_code, new_code)
+            
+            s3_client.copy_object(
+                Bucket=BUCKET_NAME,
+                CopySource={'Bucket': BUCKET_NAME, 'Key': old_key},
+                Key=new_key
+            )
+            s3_client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
+    except Exception as e:
+        print(f"R2 Rename Error: {e}")
+
 def analyze_image_with_gemini(base64_img: str, keywords: str):
     if not GEMINI_API_KEY: return {"intro": "※AIエラー: RenderのEnvironment変数にAPIキーが設定されていません。"}
     prompt = f"""メルカリShops用SEOエキスパート。画像1枚とキーワード[{keywords}]から情報を抽出しJSONで回答。性別(メンズ,レディース)やブランド名自体は不要。該当しない項目は必ず空文字""にすること。
@@ -192,11 +222,8 @@ def build_title(data, ai_data, gender_str, code):
     return " ".join(unique)[:130]
 
 
-# --- バックエンド通信口（RPC） ---
-# ★修正：POSTだけでなく、OPTIONS（CORSのプレフライト）やGETなど全てのメソッドを許可して405エラーを回避します。
 @app.api_route("/api/rpc", methods=["GET", "POST", "OPTIONS"])
 async def rpc_endpoint(req: Request, response: Response):
-    # CORS対応用のプレフライトリクエストには即座にOKを返す
     if req.method == "OPTIONS":
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS"
@@ -409,6 +436,8 @@ async def rpc_endpoint(req: Request, response: Response):
                 new_title = str(target.get("title", "")).replace(code, final_code)
                 new_images = [str(img).replace(code, final_code) for img in target.get("images", [])]
                 
+                rename_r2_files(code, final_code) # ★R2のファイル名を変更
+                
                 supabase.table("mercari_items").update({
                     "item_code": final_code, "title": new_title, "images": new_images, "pack_status": "梱包完了"
                 }).eq("item_code", code).execute()
@@ -587,6 +616,7 @@ async def rpc_endpoint(req: Request, response: Response):
                     return {"error": "アイテムに画像が登録されていないため再生成できません。"}
             return {"error": "対象のアイテムがデータベースに見つかりません。"}
 
+        # ★追加：番号強制修正時に、R2(AWS S3)上のファイル名も変更する
         elif method == "fixManagementCode":
             old_code = args[1]
             new_code = args[2]
@@ -595,6 +625,9 @@ async def rpc_endpoint(req: Request, response: Response):
                 item = res.data[0]
                 new_title = str(item.get("title", "")).replace(old_code, new_code)
                 new_images = [str(img).replace(old_code, new_code) for img in item.get("images", [])]
+                
+                rename_r2_files(old_code, new_code) # R2のリネーム処理を実行
+                
                 supabase.table("mercari_items").update({
                     "item_code": new_code, "title": new_title, "images": new_images
                 }).eq("item_code", old_code).execute()
