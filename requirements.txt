@@ -3,7 +3,7 @@ uvicorn
 supabase
 requests
 pydantic
-gunicorn
+uvicorn
 boto3
 Flask
 flask-cors
