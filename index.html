@@ -269,7 +269,7 @@
       <div style="text-align:center; margin-bottom:15px; display:flex; flex-direction:column; gap:10px; align-items:center;">
         <button class="modal-btn-sub" style="background:#B28DFF; color:#fff; border-color:#111; padding:10px 16px; width:90%; max-width:300px; font-size:13px; font-weight:normal; margin-top:0;" onclick="executeBulkAI()">✨ 未生成AI文章を一括生成</button>
         <button class="modal-btn-sub" style="background:#00E5FF; color:#111; border-color:#111; padding:10px 16px; width:90%; max-width:300px; font-size:13px; font-weight:normal; margin-top:0;" onclick="executeBatchDownload()">📥 画像とCSVを一括ダウンロード</button>
-        <!-- ★ボタンのコードは既にありますが、確実に追加しています -->
+        <!-- ★緊急修復ボタンのコード -->
         <button class="modal-btn-danger" style="border-color:#d32f2f; color:#d32f2f; padding:10px 16px; width:90%; max-width:300px; font-size:12px; font-weight:bold; margin-top:0; border-width:2px; background:#ffeeee;" onclick="executeEmergencyImageRecovery()">🚨 R2画像リンク切れ 緊急修復</button>
       </div>
       
@@ -388,7 +388,7 @@
         <button class="modal-btn-sub" style="margin-top:0; padding:6px 10px; width:auto; flex-shrink:0; font-size:10px;" onclick="submitCodeEdit()">修正</button>
       </div>
 
-      <!-- ★ご要望②・③：手動リカバリー用ツール -->
+      <!-- ★追加：【ご要望②・③】手動リカバリー用ツール -->
       <div style="background:#ffeeee; border:1px solid #d32f2f; padding:8px; border-radius:8px; margin-bottom:10px; text-align:left;">
         <label style="font-size:10px; font-weight:bold; color:#d32f2f; display:block; margin-bottom:4px;">🚨 R2画像リンク切れ 手動リカバリー</label>
         <div style="font-size:9px; color:#333; margin-bottom:4px;">R2に残っている古いTMP番号を入力して強制紐付けします。</div>
@@ -1095,7 +1095,7 @@
       }
     }
 
-    // ★修正：枠外にはみ出たバグアイテムも「すべて」強制的に画面に描画させるロジックに変更
+    // ★修正：「AIの一括生成ボタン」が画面上の隠れアイテムも全て対象にして判定するように修正
     async function loadAdminList(target=""){
       if (!target && activeBatchSheet) {
           target = activeBatchSheet;
@@ -1105,7 +1105,9 @@
       try {
         const res = await rpcCall('getAdminData', target);
         hideLoading(); if(!res.config)return; 
-        currentAdminSheet=res.currentViewSheet; lastAdminData = res.itemMap; 
+        currentAdminSheet=res.currentViewSheet; 
+        // ★lastAdminData を res.itemMap 全体として保持する（ボタンが参照するため）
+        lastAdminData = res.itemMap; 
         activeBatchSheet = currentAdminSheet; localStorage.setItem('activeBatchSheet', activeBatchSheet);
         
         let p="OM", st=1, sx="HG", en=0, m=currentAdminSheet.match(new RegExp("^([A-Za-z]+)(\\d+)([A-Za-z]+)〜([A-Za-z]+)(\\d+)([A-Za-z]+)$"));
@@ -1517,7 +1519,7 @@
       let targets = [];
       Object.keys(lastAdminData).forEach(function(k) {
         let d = lastAdminData[k]; if(!d) return;
-        let needsAI = (!d.title || d.title.trim() === "" || !d.desc || d.desc.trim() === "" || d.desc.includes("※AIエラー"));
+        let needsAI = (!d.title || d.title.trim() === "" || !d.desc || d.desc.trim() === "" || d.desc.includes("※AIエラー") || d.desc.includes("※AI通信エラー"));
         if(needsAI) targets.push(k);
       });
       if(targets.length === 0) { alert("生成が必要なアイテムはありません！"); return; }
