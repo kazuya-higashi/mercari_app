@@ -8,9 +8,9 @@ import base64
 import requests
 import unicodedata
 import boto3
-from datetime import datetime # ★追加：時間計算用
+from datetime import datetime
 from botocore.config import Config
-from fastapi import FastAPI, Request, Response, BackgroundTasks
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from supabase import create_client, Client
@@ -125,24 +125,22 @@ def assign_real_code_internal(sheetName, oldCode):
         
     return f"{prefix}{nextNum}{suffix}"
 
+# ★変更点：エラーを逃さず、厳密にコピー＆削除を行う仕様に修正
 def rename_r2_files(old_code, new_code):
-    try:
-        response = s3_client.list_objects_v2(Bucket=BUCKET_NAME, Prefix=old_code)
-        if 'Contents' not in response:
-            return
-            
-        for obj in response['Contents']:
-            old_key = obj['Key']
-            new_key = old_key.replace(old_code, new_code)
-            
-            s3_client.copy_object(
-                Bucket=BUCKET_NAME,
-                CopySource={'Bucket': BUCKET_NAME, 'Key': old_key},
-                Key=new_key
-            )
-            s3_client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
-    except Exception as e:
-        print(f"R2 Rename Error: {e}")
+    response = s3_client.list_objects_v2(Bucket=BUCKET_NAME, Prefix=old_code)
+    if 'Contents' not in response:
+        return
+        
+    for obj in response['Contents']:
+        old_key = obj['Key']
+        new_key = old_key.replace(old_code, new_code)
+        
+        s3_client.copy_object(
+            Bucket=BUCKET_NAME,
+            CopySource=f"{BUCKET_NAME}/{old_key}",
+            Key=new_key
+        )
+        s3_client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
 
 def analyze_image_with_gemini(base64_img: str, keywords: str):
     if not GEMINI_API_KEY: return {"intro": "※AIエラー: RenderのEnvironment変数にAPIキーが設定されていません。"}
@@ -172,8 +170,7 @@ def analyze_image_with_gemini(base64_img: str, keywords: str):
             return {"intro": f"※AIブロック: {json.dumps(data.get('promptFeedback', '画像が不適切と判定された可能性があります'))}"}
         
         text = data["candidates"][0]["content"]["parts"][0]["text"]
-        text = text.replace("
-```json", "").replace("```", "").strip()
+        text = text.replace("```json", "").replace("```", "").strip()
         m = re.search(r'\{.*\}', text, re.DOTALL)
         if m:
             text = m.group(0)
@@ -224,7 +221,7 @@ def build_title(data, ai_data, gender_str, code):
 
 # --- バックエンド通信口（RPC） ---
 @app.api_route("/api/rpc", methods=["GET", "POST", "OPTIONS"])
-async def rpc_endpoint(req: Request, response: Response, background_tasks: BackgroundTasks):
+async def rpc_endpoint(req: Request, response: Response):
     if req.method == "OPTIONS":
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS"
@@ -416,7 +413,8 @@ async def rpc_endpoint(req: Request, response: Response, background_tasks: Backg
                         "categoryText": r.get("category_text", "")
                     })
             return {"data": items}
-            
+
+        # ★修正：【ご要望①】梱包時のR2リネームをバックグラウンドから「同期処理（確実な実行）」に変更
         elif method == "savePackingPhotoAndAssignCode":
             code = args[0]
             targetSheetName = args[2] if len(args) > 2 and args[2] else None
@@ -437,7 +435,11 @@ async def rpc_endpoint(req: Request, response: Response, background_tasks: Backg
                 new_title = str(target.get("title", "")).replace(code, final_code)
                 new_images = [str(img).replace(code, final_code) for img in target.get("images", [])]
                 
-                background_tasks.add_task(rename_r2_files, code, final_code)
+                # S3(R2)のリネームを完全に完了させてからDBを更新する（漏れを物理的に防ぐ）
+                try:
+                    rename_r2_files(code, final_code)
+                except Exception as e:
+                    raise Exception(f"R2サーバーでの画像名前変更に失敗しました。詳細: {str(e)}")
                 
                 supabase.table("mercari_items").update({
                     "item_code": final_code, "title": new_title, "images": new_images, "pack_status": "梱包完了"
@@ -622,6 +624,7 @@ async def rpc_endpoint(req: Request, response: Response, background_tasks: Backg
                     return {"error": "アイテムに画像が登録されていないため再生成できません。"}
             return {"error": "対象のアイテムがデータベースに見つかりません。"}
 
+        # ★修正：番号強制修正時も確実に同期処理でリネームを実行
         elif method == "fixManagementCode":
             old_code = args[1]
             new_code = args[2]
@@ -631,11 +634,14 @@ async def rpc_endpoint(req: Request, response: Response, background_tasks: Backg
                 new_title = str(item.get("title", "")).replace(old_code, new_code)
                 new_images = [str(img).replace(old_code, new_code) for img in item.get("images", [])]
                 
+                try:
+                    rename_r2_files(old_code, new_code)
+                except Exception as e:
+                    return {"error": f"R2サーバーでの画像名前変更に失敗しました。詳細: {str(e)}"}
+
                 supabase.table("mercari_items").update({
                     "item_code": new_code, "title": new_title, "images": new_images
                 }).eq("item_code", old_code).execute()
-
-                background_tasks.add_task(rename_r2_files, old_code, new_code)
                 
             return {"data": "OK"}
 
@@ -711,108 +717,38 @@ async def rpc_endpoint(req: Request, response: Response, background_tasks: Backg
             return {"data": "OK"}
 
         # ==========================================
-        # ★追加：新アプリ用 超緊急画像リカバリー処理（安全重視・厳格マッチング版）
+        # ★追加：【ご要望②・③】R2画像リンク切れ 手動リカバリー機能
         # ==========================================
-        elif method == "emergencyImageRecovery":
-            # 1. データベースから「OM〜」の正規の管理番号と作成日時を取得
-            res = supabase.table("mercari_items").select("item_code, created_at").execute()
-            db_items = []
-            for r in res.data:
-                code = r["item_code"]
-                if code.startswith("TMP-") or code == "SYSTEM_SETTINGS" or code.startswith("BATCH-"):
-                    continue
-                try:
-                    time_str = r.get("created_at", "")
-                    if time_str.endswith("Z"):
-                        time_str = time_str[:-1] + "+00:00"
-                    dt = datetime.fromisoformat(time_str)
-                    ts = int(dt.timestamp() * 1000) # 常に13桁（ミリ秒）に統一
-                    db_items.append({"code": code, "ts": ts})
-                except:
-                    pass
+        elif method == "manualR2Recovery":
+            old_tmp = args[0]   # 例: TMP-1777825362150
+            new_code = args[1]  # 例: OM12063HG
             
-            # 2. R2から「TMP-」を含む全ファイルを取得
-            all_tmp_files = []
-            continuation_token = None
-            while True:
-                list_kwargs = {'Bucket': BUCKET_NAME, 'Prefix': 'TMP-'}
-                if continuation_token:
-                    list_kwargs['ContinuationToken'] = continuation_token
+            try:
+                # ユーザーが指定したTMP番号を元にR2から画像を検索
+                response = s3_client.list_objects_v2(Bucket=BUCKET_NAME, Prefix=old_tmp)
+                if 'Contents' not in response:
+                    return {"error": f"R2サーバー内に「{old_tmp}」で始まる画像が見つかりませんでした。\n入力した番号に間違いがないか確認してください。"}
+                
+                # 見つかったすべての写真を、指定されたOM番号にリネーム
+                count = 0
+                for obj in response['Contents']:
+                    old_key = obj['Key']
+                    new_key = old_key.replace(old_tmp, new_code)
                     
-                response = s3_client.list_objects_v2(**list_kwargs)
-                if 'Contents' in response:
-                    for obj in response['Contents']:
-                        all_tmp_files.append(obj['Key'])
-                                
-                if response.get('IsTruncated'):
-                    continuation_token = response.get('NextContinuationToken')
-                else:
-                    break
-
-            if not all_tmp_files:
-                return {"data": "R2サーバーに「TMP-」から始まる画像は見つかりませんでした。"}
-
-            # 3. TMPのグループ（同じタイムスタンプの画像群）ごとに安全な紐付け先を探す
-            tmp_groups = set()
-            for key in all_tmp_files:
-                m = re.search(r'TMP-(\d+)', key)
-                if m:
-                    tmp_groups.add(m.group(1))
-
-            proposed_matches = {}
-            db_code_to_tmps = {}
-
-            for tmp_str in tmp_groups:
-                file_ts_raw = int(tmp_str)
-                # 10桁と13桁の混在を吸収
-                file_ts = file_ts_raw * 1000 if len(str(file_ts_raw)) <= 10 else file_ts_raw
-                
-                closest_item = None
-                min_diff = float('inf')
-                for item in db_items:
-                    diff = abs(item["ts"] - file_ts)
-                    if diff < min_diff:
-                        min_diff = diff
-                        closest_item = item
-                
-                # ★安全性チェック1: 時間のズレが「5分 (300,000ミリ秒)」以内のみ許可
-                if closest_item and min_diff <= 300000:
-                    db_code = closest_item["code"]
-                    proposed_matches[tmp_str] = db_code
-                    if db_code not in db_code_to_tmps:
-                        db_code_to_tmps[db_code] = []
-                    db_code_to_tmps[db_code].append(tmp_str)
-
-            # ★安全性チェック2: 1つのDBデータに対して、複数のTMPが紐づこうとしている場合は危険なので除外
-            safe_matches = {}
-            for tmp_str, db_code in proposed_matches.items():
-                if len(db_code_to_tmps[db_code]) == 1:
-                    safe_matches[tmp_str] = db_code
-
-            # 4. 安全が確認されたものだけをリネーム実行
-            recovered_count = 0
-            for old_key in all_tmp_files:
-                m = re.search(r'TMP-(\d+)', old_key)
-                if m:
-                    tmp_str = m.group(1)
-                    if tmp_str in safe_matches:
-                        new_code = safe_matches[tmp_str]
-                        new_key = old_key.replace(f"TMP-{tmp_str}", new_code)
-                        try:
-                            s3_client.copy_object(
-                                Bucket=BUCKET_NAME,
-                                CopySource=f"{BUCKET_NAME}/{old_key}",
-                                Key=new_key
-                            )
-                            s3_client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
-                            recovered_count += 1
-                        except Exception as copy_err:
-                            print("R2 Copy err:", copy_err)
-
-            # 実行結果のメッセージ作成
-            skipped_groups = len(tmp_groups) - len(safe_matches)
-            msg = f"修復完了: 安全性が確実な {recovered_count}個 のファイルを正規の番号に紐付けました。"
-            if skipped_groups > 0:
-                msg += f"\n\n※安全装置作動: 別の商品と混ざるリスクがある {skipped_groups}件 の不確実な画像群は、意図的にスキップしました。"
-
-            return {"data": msg}
+                    s3_client.copy_object(
+                        Bucket=BUCKET_NAME,
+                        CopySource=f"{BUCKET_NAME}/{old_key}",
+                        Key=new_key
+                    )
+                    s3_client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
+                    count += 1
+                    
+                return {"data": f"修復成功！\n{count}枚の画像を強制的に {new_code} に紐付けました。"}
+            except Exception as e:
+                return {"error": f"R2サーバーでの操作に失敗しました。詳細: {str(e)}"}
+            
+        else:
+            return {"data": "OK"}
+            
+    except Exception as e:
+        return {"error": str(e)}
