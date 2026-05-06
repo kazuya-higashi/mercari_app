@@ -8,6 +8,7 @@ import base64
 import requests
 import unicodedata
 import boto3
+from datetime import datetime # ★追加：時間計算用
 from botocore.config import Config
 from fastapi import FastAPI, Request, Response, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,7 +21,6 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 PUBLIC_URL = "https://pub-8e4386156d26427f861486afe0381fb4.r2.dev"
 
-# ★ご自身のデプロイしたURLに書き換えてください
 SPREADSHEET_ID = '1kpKObKqse7sfcG_VByhF1uWeMRTdFYPAu4VS0eqh6PU'
 GAS_API_URL = "https://script.google.com/macros/s/AKfycbwX3CsxVEfZ1OUa5ytPkBmsElpihy6hKrm_vzW_KOlyX25Xim6jLNmW3fEflUF16B37/exec"
 
@@ -437,7 +437,6 @@ async def rpc_endpoint(req: Request, response: Response, background_tasks: Backg
                 new_title = str(target.get("title", "")).replace(code, final_code)
                 new_images = [str(img).replace(code, final_code) for img in target.get("images", [])]
                 
-                # ★修正: タイムアウトを防ぐため、リネームを「裏作業（BackgroundTasks）」に回し、DB更新を最優先にする
                 background_tasks.add_task(rename_r2_files, code, final_code)
                 
                 supabase.table("mercari_items").update({
@@ -475,7 +474,6 @@ async def rpc_endpoint(req: Request, response: Response, background_tasks: Backg
                 code = str(r["item_code"])
                 if code == "SYSTEM_SETTINGS" or code.startswith("BATCH-"): continue
                 
-                # ★自動修復ロジック：正式番号なのに「梱包ステータス」が空（エラー等で途切れたもの）を自動復旧
                 pack_status = str(r.get("pack_status", ""))
                 if not code.startswith("TMP-") and pack_status == "":
                     pack_status = "梱包完了"
@@ -633,7 +631,6 @@ async def rpc_endpoint(req: Request, response: Response, background_tasks: Backg
                 new_title = str(item.get("title", "")).replace(old_code, new_code)
                 new_images = [str(img).replace(old_code, new_code) for img in item.get("images", [])]
                 
-                # ★ここもバックグラウンド処理に変更
                 supabase.table("mercari_items").update({
                     "item_code": new_code, "title": new_title, "images": new_images
                 }).eq("item_code", old_code).execute()
@@ -712,6 +709,82 @@ async def rpc_endpoint(req: Request, response: Response, background_tasks: Backg
                 
             supabase.table("mercari_items").update({"images": updateArr}).eq("item_code", itemCode).execute()
             return {"data": "OK"}
+
+        # ==========================================
+        # ★追加：新アプリ用 超緊急画像リカバリー処理
+        # ==========================================
+        elif method == "emergencyImageRecovery":
+            # 1. データベースから「OM〜」の正規の管理番号と作成日時を取得
+            res = supabase.table("mercari_items").select("item_code, created_at").execute()
+            db_items = []
+            for r in res.data:
+                code = r["item_code"]
+                if code.startswith("TMP-") or code == "SYSTEM_SETTINGS" or code.startswith("BATCH-"):
+                    continue
+                try:
+                    time_str = r.get("created_at", "")
+                    if time_str.endswith("Z"):
+                        time_str = time_str[:-1] + "+00:00"
+                    dt = datetime.fromisoformat(time_str)
+                    ts = int(dt.timestamp() * 1000)
+                    db_items.append({"code": code, "ts": ts})
+                except:
+                    pass
+            
+            # 2. R2から「TMP-」を含むファイルを探してリネーム
+            recovered_count = 0
+            continuation_token = None
+            
+            while True:
+                list_kwargs = {'Bucket': BUCKET_NAME, 'Prefix': 'TMP-'}
+                if continuation_token:
+                    list_kwargs['ContinuationToken'] = continuation_token
+                    
+                response = s3_client.list_objects_v2(**list_kwargs)
+                if 'Contents' not in response:
+                    break
+                    
+                for obj in response['Contents']:
+                    old_key = obj['Key']
+                    m = re.search(r'TMP-(\d+)', old_key)
+                    if m:
+                        tmp_code = m.group(1) # e.g. TMP-12345678
+                        try:
+                            file_ts = int(m.group(1).replace("TMP-", ""))
+                            
+                            # 最も作成時間が近いデータベースのレコードを探す
+                            closest_item = None
+                            min_diff = float('inf')
+                            for item in db_items:
+                                diff = abs(item["ts"] - file_ts)
+                                if diff < min_diff:
+                                    min_diff = diff
+                                    closest_item = item
+                            
+                            # 時間のズレが24時間以内なら強制マッチング
+                            if closest_item and min_diff < 86400000:
+                                new_code = closest_item["code"]
+                                new_key = old_key.replace(tmp_code, new_code)
+                                
+                                try:
+                                    s3_client.copy_object(
+                                        Bucket=BUCKET_NAME,
+                                        CopySource={'Bucket': BUCKET_NAME, 'Key': old_key},
+                                        Key=new_key
+                                    )
+                                    s3_client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
+                                    recovered_count += 1
+                                except Exception as copy_err:
+                                    print("R2 Copy err:", copy_err)
+                        except:
+                            pass
+                                
+                if response.get('IsTruncated'):
+                    continuation_token = response.get('NextContinuationToken')
+                else:
+                    break
+                    
+            return {"data": f"修復完了: R2サーバーに取り残されていた画像を解析し、{recovered_count}個のファイルを正規の管理番号に紐付けて救出しました！"}
             
         else:
             return {"data": "OK"}
