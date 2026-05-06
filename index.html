@@ -904,9 +904,17 @@
       try {
         const r = await rpcCall('saveMeasurement', currentMeasureCode, d, activeBatchSheet);
         hideLoading();
-        if(r==="OK"){ document.getElementById('customNumpad').style.display='none'; loadPendingMeasurements(); } else alert("エラー: " + r);
+        if(r==="OK"){ 
+          document.getElementById('customNumpad').style.display='none'; 
+          loadPendingMeasurements(); 
+        } else {
+          // AI側のエラーで返ってきた場合
+          alert("混雑などのため未送信です。\n入力した数字は残していますので、少し時間を置いてから再度「送信」を押してください。\n\n詳細: " + r);
+        }
       } catch (e) {
-        hideLoading(); alert("通信エラー: " + e.message); 
+        hideLoading(); 
+        // 完全に通信が遮断された場合
+        alert("通信が混雑しているため未送信です。\n入力した数字は残していますので、少し時間を置いてから再度「送信」を押してください。\n\n詳細: " + e.message); 
       }
     }
 
