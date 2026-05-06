@@ -269,6 +269,8 @@
       <div style="text-align:center; margin-bottom:15px; display:flex; flex-direction:column; gap:10px; align-items:center;">
         <button class="modal-btn-sub" style="background:#B28DFF; color:#fff; border-color:#111; padding:10px 16px; width:90%; max-width:300px; font-size:13px; font-weight:normal; margin-top:0;" onclick="executeBulkAI()">✨ 未生成AI文章を一括生成</button>
         <button class="modal-btn-sub" style="background:#00E5FF; color:#111; border-color:#111; padding:10px 16px; width:90%; max-width:300px; font-size:13px; font-weight:normal; margin-top:0;" onclick="executeBatchDownload()">📥 画像とCSVを一括ダウンロード</button>
+        <!-- ★ボタンのコードは既にありますが、確実に追加しています -->
+        <button class="modal-btn-danger" style="border-color:#d32f2f; color:#d32f2f; padding:10px 16px; width:90%; max-width:300px; font-size:12px; font-weight:bold; margin-top:0; border-width:2px; background:#ffeeee;" onclick="executeEmergencyImageRecovery()">🚨 R2画像リンク切れ 緊急修復</button>
       </div>
       
       <div id="admin-move-panel" style="background:#fff; border:1px solid #111; padding:10px; border-radius:10px; margin-bottom:15px; display:none; flex-direction:column; gap:8px;">
@@ -285,6 +287,8 @@
         <span style="padding:4px 8px; border-radius:6px; background:#00E5FF; color:#111; display:flex; align-items:center;">採寸済</span>
         <span style="padding:4px 8px; border-radius:6px; background:#FFDE59; color:#111; display:flex; align-items:center;">梱包済</span>
       </div>
+      
+      <!-- アイテムリスト表示領域 -->
       <div id="admin-list"></div>
       
       <div style="text-align:center; margin-top:30px; padding-bottom:10px; display:flex; justify-content:center; gap:10px;">
@@ -384,7 +388,7 @@
         <button class="modal-btn-sub" style="margin-top:0; padding:6px 10px; width:auto; flex-shrink:0; font-size:10px;" onclick="submitCodeEdit()">修正</button>
       </div>
 
-      <!-- ★追加：【ご要望②・③】手動リカバリー用ツール -->
+      <!-- ★ご要望②・③：手動リカバリー用ツール -->
       <div style="background:#ffeeee; border:1px solid #d32f2f; padding:8px; border-radius:8px; margin-bottom:10px; text-align:left;">
         <label style="font-size:10px; font-weight:bold; color:#d32f2f; display:block; margin-bottom:4px;">🚨 R2画像リンク切れ 手動リカバリー</label>
         <div style="font-size:9px; color:#333; margin-bottom:4px;">R2に残っている古いTMP番号を入力して強制紐付けします。</div>
@@ -1091,6 +1095,7 @@
       }
     }
 
+    // ★修正：枠外にはみ出たバグアイテムも「すべて」強制的に画面に描画させるロジックに変更
     async function loadAdminList(target=""){
       if (!target && activeBatchSheet) {
           target = activeBatchSheet;
@@ -1152,22 +1157,65 @@
 
           html+=`<div class="batch-item ${bgClass}" style="${borderStyle}" onclick="openEditModal('${c}',${isPacked},'${sd}','${modalErrReason}')">${renderItm(c,d,idx)}</div>`;
         };
-        
-        if(en>0){
-          let existingCodes = []; let tmpCodes = []; let unassignedCodes = [];
-          for(let i=st; i<=en; i++){ let c = `${p}${i}${sx}`; if (res.itemMap[c]) existingCodes.push(c); else unassignedCodes.push(c); }
-          Object.keys(res.itemMap).forEach(function(k){ if(k.startsWith("TMP-")) tmpCodes.push(k); });
-          let emptyCount = Math.max(0, unassignedCodes.length - tmpCodes.length); let emptyCodesToRender = unassignedCodes.slice(0, emptyCount);
-          let globalIdx = 1;
-          existingCodes.forEach(c => { addHtml(c, globalIdx++); }); tmpCodes.forEach(c => { addHtml(c, globalIdx++); }); emptyCodesToRender.forEach(c => { addHtml(c, globalIdx++); });
-        } else {
-          let globalIdx = 1; Object.keys(res.itemMap).forEach(function(k){ addHtml(k, globalIdx++); });
+
+        // 枠に関係なく、すべてのDBアイテムをリストアップ
+        let formalCodes = [];
+        let tmpCodes = [];
+        let unassignedCodes = [];
+
+        Object.keys(res.itemMap).forEach(function(k){ 
+            if(k.startsWith("TMP-")) {
+                tmpCodes.push(k);
+            } else {
+                formalCodes.push(k);
+            }
+        });
+
+        // 枠内の空きスロットを計算
+        if(en > 0){
+            for(let i=st; i<=en; i++){ 
+                let c = `${p}${i}${sx}`; 
+                if (!res.itemMap[c]) {
+                    unassignedCodes.push(c);
+                }
+            }
         }
+
+        formalCodes.sort();
+        tmpCodes.sort();
+
+        // 描画順: 正式な番号(OM) -> 仮番号(TMP) -> 余った空枠
+        let maxCapacity = (en > 0) ? (en - st + 1) : 0;
+        let emptySlotsNeeded = Math.max(0, maxCapacity - (formalCodes.length + tmpCodes.length));
+        let emptyCodesToRender = unassignedCodes.slice(0, emptySlotsNeeded);
+
+        let globalIdx = 1;
+        formalCodes.forEach(c => addHtml(c, globalIdx++));
+        tmpCodes.forEach(c => addHtml(c, globalIdx++));
+        emptyCodesToRender.forEach(c => addHtml(c, globalIdx++));
         
         document.getElementById('admin-list').innerHTML=html+'</div>'+(shc>0?`<div style="margin-top:20px;text-align:center;color:#888;font-size:12px;font-weight:normal;">配送完了：${shc}件</div>`:'');
         updateMoveTargetDropdown(res.allSheets); toggleMovePanel();
       } catch (e) {
         hideLoading(); alert("通信エラー: " + e.message); 
+      }
+    }
+
+    // ==========================================
+    // ★追加：新アプリ用 超緊急画像リカバリー機能
+    // ==========================================
+    async function executeEmergencyImageRecovery() {
+      if(!confirm("【緊急修復】\nクラウド上(R2)に古い「TMP-」の名前のまま取り残されている画像ファイルを検索し、データベースと照合して「正式な管理番号」に一括で紐付け・修正します。\n\n実行しますか？（※数分かかる場合があります）")) return;
+      
+      showLoading("R2サーバーの画像を自動修復中...");
+      try {
+        const r = await rpcCall('emergencyImageRecovery');
+        hideLoading();
+        alert(r);
+        loadAdminList(currentAdminSheet);
+      } catch(e) {
+        hideLoading(); 
+        alert("通信エラー: " + e.message);
       }
     }
 
@@ -1380,7 +1428,6 @@
     async function executeManualRecovery() {
         let oldTmp = document.getElementById('manualRecoveryTmpInput').value.trim();
         if(!oldTmp) return alert("古いTMP番号を入力してください。");
-        if(!oldTmp.startswith("TMP-")) return alert("TMP- から始まる番号を入力してください。");
         
         if(!confirm(`R2上の「${oldTmp}」の画像を、現在の管理番号「${currentEditCode}」に強制的にリネームして紐付けます。\n\nよろしいですか？`)) return;
         
@@ -1388,14 +1435,17 @@
         try {
             const r = await rpcCall('manualR2Recovery', oldTmp, currentEditCode);
             hideLoading();
-            alert(r);
+            alert(r.data || r.error);
             
             document.getElementById('manualRecoveryTmpInput').value = "";
             
             // 成功したら画像を再読み込みして表示
-            document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>画像を取得中...</div>';
-            const res = await rpcCall('getItemImagesForAdmin', currentAdminSheet, currentEditCode);
-            renderAdminImages(res.images);
+            if(!r.error) {
+               document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>画像を取得中...</div>';
+               const res = await rpcCall('getItemImagesForAdmin', currentAdminSheet, currentEditCode);
+               renderAdminImages(res.images);
+               loadAdminList(currentAdminSheet);
+            }
         } catch(e) {
             hideLoading();
             alert("エラーが発生しました: " + e.message);
