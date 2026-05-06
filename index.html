@@ -1519,7 +1519,8 @@
       let targets = [];
       Object.keys(lastAdminData).forEach(function(k) {
         let d = lastAdminData[k]; if(!d) return;
-        let needsAI = (!d.title || d.title.trim() === "" || !d.desc || d.desc.trim() === "" || d.desc.includes("※AIエラー") || d.desc.includes("※AI通信エラー"));
+        // ★修正: 厳しすぎた条件を緩め、「※AI」という文字が含まれていればすべて拾い上げるようにしました
+        let needsAI = (!d.title || d.title.trim() === "" || !d.desc || d.desc.trim() === "" || d.desc.includes("※AI"));
         if(needsAI) targets.push(k);
       });
       if(targets.length === 0) { alert("生成が必要なアイテムはありません！"); return; }
