@@ -269,6 +269,8 @@
       <div style="text-align:center; margin-bottom:15px; display:flex; flex-direction:column; gap:10px; align-items:center;">
         <button class="modal-btn-sub" style="background:#B28DFF; color:#fff; border-color:#111; padding:10px 16px; width:90%; max-width:300px; font-size:13px; font-weight:normal; margin-top:0;" onclick="executeBulkAI()">✨ 未生成AI文章を一括生成</button>
         <button class="modal-btn-sub" style="background:#00E5FF; color:#111; border-color:#111; padding:10px 16px; width:90%; max-width:300px; font-size:13px; font-weight:normal; margin-top:0;" onclick="executeBatchDownload()">📥 画像とCSVを一括ダウンロード</button>
+        <!-- ★追加：梱包写真ダウンロードボタン -->
+        <button class="modal-btn-sub" style="background:#FFDE59; color:#111; border-color:#111; padding:10px 16px; width:90%; max-width:300px; font-size:13px; font-weight:normal; margin-top:0;" onclick="executePackDownload()">📦 梱包写真のみ一括ダウンロード</button>
         <!-- ★緊急修復ボタンのコード -->
         <button class="modal-btn-danger" style="border-color:#d32f2f; color:#d32f2f; padding:10px 16px; width:90%; max-width:300px; font-size:12px; font-weight:bold; margin-top:0; border-width:2px; background:#ffeeee;" onclick="executeEmergencyImageRecovery()">🚨 R2画像リンク切れ 緊急修復</button>
       </div>
@@ -1567,7 +1569,62 @@
       if(!confirm("一括生成を中止しますか？")) return;
       isBulkAILogicRunning = false; document.getElementById('ai-running-banner').innerHTML = `<span class="mini-spinner"></span>中止処理中...`;
     }
+// ==========================================
+    // ★追加：梱包写真（_packing.jpg）の一括ダウンロード機能
+    // ==========================================
+    async function executePackDownload() {
+        if (!currentAdminSheet || !lastAdminData) return;
+        
+        let packCodes = [];
+        Object.keys(lastAdminData).forEach(k => {
+            let d = lastAdminData[k];
+            if (d && (d.packStatus === "梱包完了" || d.shipStatus === "配送完了") && !k.startsWith("TMP-")) {
+                packCodes.push(k);
+            }
+        });
 
+        if (packCodes.length === 0) {
+            return alert("この枠には梱包済みのアイテムがありません。");
+        }
+
+        if (!confirm(`梱包済みの ${packCodes.length} 件のパッキング写真をZIPでダウンロードしますか？\n（※スマホの場合は「ファイル」アプリに保存されます）`)) return;
+
+        showLoading("パッキング写真を収集してZIPを作成中...\n(少々お待ちください)");
+        
+        try {
+            const zip = new JSZip();
+            let successCount = 0;
+            
+            for (let code of packCodes) {
+                let imgName = `${code}_packing.jpg`;
+                let url = `${PUBLIC_URL}/${imgName}`;
+                try {
+                    let response = await fetch(url);
+                    if (response.ok) {
+                        let blob = await response.blob();
+                        zip.file(imgName, blob);
+                        successCount++;
+                    }
+                } catch(err) { console.log("取得スキップ:", imgName); }
+            }
+            
+            if (successCount === 0) {
+                hideLoading();
+                return alert("R2上にパッキング写真が見つかりませんでした。");
+            }
+
+            document.getElementById('loadingText').innerText = "ZIPファイルを保存中...";
+            const zipBlob = await zip.generateAsync({ type: "blob" });
+            const dateStr = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+            saveAs(zipBlob, `packing_photos_${currentAdminSheet}_${dateStr}.zip`);
+            
+            hideLoading();
+            alert(`${successCount}枚のパッキング写真をダウンロードしました！`);
+        } catch (e) {
+            hideLoading();
+            alert("エラーが発生しました: " + e.message);
+        }
+    }
     async function executeBatchDownload() {
         if (!currentAdminSheet) return;
         showLoading("サーバー経由でZIPデータを準備中...\n(※画像が多いと数分かかる場合があります)");
