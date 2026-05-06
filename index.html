@@ -985,15 +985,33 @@
         let dataUrl = await compressImage(this.files[0], 600, 0.4); 
         const blob = await (await fetch(dataUrl)).blob();
 
-        showLoading("梱包完了＆リネーム処理中...");
+        showLoading("梱包完了＆データ更新中...");
         
         const res = await rpcCall('savePackingPhotoAndAssignCode', currentPackCode, "DUMMY", activeBatchSheet);
         
         if(res.status === "OK") {
-           showLoading("R2へアップロード中...");
+           showLoading("R2の画像をリネーム・保存中...");
+
+           // ①梱包写真のアップロード
            const fileName = `${res.finalCode}_packing.jpg`;
            const params = { Bucket: BUCKET_NAME, Key: fileName, Body: blob, ContentType: 'image/jpeg' };
            await s3.putObject(params).promise();
+
+           // ★②大修正：元のアイテム画像（TMP）も正式番号に一括リネームする！
+           if (currentPackCode !== res.finalCode) {
+               const data = await s3.listObjectsV2({ Bucket: BUCKET_NAME, Prefix: currentPackCode }).promise();
+               if (data.Contents) {
+                   for (let obj of data.Contents) {
+                       let oldKey = obj.Key;
+                       // 元のTMP番号を含む画像だけをリネーム（packing等は巻き込まない）
+                       if (oldKey.includes(currentPackCode)) {
+                           let newKey = oldKey.replace(currentPackCode, res.finalCode);
+                           await s3.copyObject({ Bucket: BUCKET_NAME, CopySource: encodeURI(BUCKET_NAME + '/' + oldKey), Key: newKey }).promise();
+                           await s3.deleteObject({ Bucket: BUCKET_NAME, Key: oldKey }).promise();
+                       }
+                   }
+               }
+           }
 
            hideLoading(); document.getElementById('packImageInput').value='';
            
@@ -1007,7 +1025,7 @@
         } else {
            hideLoading(); alert(res.error);
         }
-      } catch(e) { hideLoading(); alert(e); } 
+      } catch(e) { hideLoading(); alert(e.message); } 
     });
 
     function closeFinalAssignedCodeModal() { document.getElementById('finalAssignedCodeModal').style.display = 'none'; }
