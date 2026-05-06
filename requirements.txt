@@ -5,3 +5,8 @@ requests
 pydantic
 gunicorn
 boto3
+Flask
+flask-cors
+supabase
+google-generativeai
+requests
