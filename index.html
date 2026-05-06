@@ -269,9 +269,6 @@
       <div style="text-align:center; margin-bottom:15px; display:flex; flex-direction:column; gap:10px; align-items:center;">
         <button class="modal-btn-sub" style="background:#B28DFF; color:#fff; border-color:#111; padding:10px 16px; width:90%; max-width:300px; font-size:13px; font-weight:normal; margin-top:0;" onclick="executeBulkAI()">✨ 未生成AI文章を一括生成</button>
         <button class="modal-btn-sub" style="background:#00E5FF; color:#111; border-color:#111; padding:10px 16px; width:90%; max-width:300px; font-size:13px; font-weight:normal; margin-top:0;" onclick="executeBatchDownload()">📥 画像とCSVを一括ダウンロード</button>
-        
-        <!-- ★緊急修復ボタンを確実に追加 -->
-        <button class="modal-btn-danger" style="border-color:#d32f2f; color:#d32f2f; padding:10px 16px; width:90%; max-width:300px; font-size:12px; font-weight:bold; margin-top:0; border-width:2px; background:#ffeeee;" onclick="executeEmergencyImageRecovery()">🚨 R2画像リンク切れ 緊急修復</button>
       </div>
       
       <div id="admin-move-panel" style="background:#fff; border:1px solid #111; padding:10px; border-radius:10px; margin-bottom:15px; display:none; flex-direction:column; gap:8px;">
@@ -385,6 +382,16 @@
           <input type="text" id="editNewCodeInput" style="padding:4px; font-size:16px; margin-bottom:0;">
         </div>
         <button class="modal-btn-sub" style="margin-top:0; padding:6px 10px; width:auto; flex-shrink:0; font-size:10px;" onclick="submitCodeEdit()">修正</button>
+      </div>
+
+      <!-- ★追加：【ご要望②・③】手動リカバリー用ツール -->
+      <div style="background:#ffeeee; border:1px solid #d32f2f; padding:8px; border-radius:8px; margin-bottom:10px; text-align:left;">
+        <label style="font-size:10px; font-weight:bold; color:#d32f2f; display:block; margin-bottom:4px;">🚨 R2画像リンク切れ 手動リカバリー</label>
+        <div style="font-size:9px; color:#333; margin-bottom:4px;">R2に残っている古いTMP番号を入力して強制紐付けします。</div>
+        <div style="display:flex; gap:4px;">
+          <input type="text" id="manualRecoveryTmpInput" placeholder="例: TMP-1777825362150" style="padding:4px; font-size:12px; margin-bottom:0; flex-grow:1;">
+          <button class="modal-btn-danger" style="margin-top:0; padding:4px 8px; font-size:10px; width:auto; border-radius:6px;" onclick="executeManualRecovery()">復旧</button>
+        </div>
       </div>
 
       <div style="margin-bottom:0;">
@@ -972,7 +979,7 @@
         let dataUrl = await compressImage(this.files[0], 600, 0.4); 
         const blob = await (await fetch(dataUrl)).blob();
 
-        showLoading("梱包完了処理中...");
+        showLoading("梱包完了＆リネーム処理中...");
         
         const res = await rpcCall('savePackingPhotoAndAssignCode', currentPackCode, "DUMMY", activeBatchSheet);
         
@@ -1161,24 +1168,6 @@
         updateMoveTargetDropdown(res.allSheets); toggleMovePanel();
       } catch (e) {
         hideLoading(); alert("通信エラー: " + e.message); 
-      }
-    }
-
-    // ==========================================
-    // ★追加：新アプリ用 超緊急画像リカバリー機能
-    // ==========================================
-    async function executeEmergencyImageRecovery() {
-      if(!confirm("【緊急修復】\nクラウド上(R2)に古い「TMP-」の名前のまま取り残されている画像ファイルを検索し、データベースと照合して「正式な管理番号」に一括で紐付け・修正します。\n\n実行しますか？（※数分かかる場合があります）")) return;
-      
-      showLoading("R2サーバーの画像を自動修復中...");
-      try {
-        const r = await rpcCall('emergencyImageRecovery');
-        hideLoading();
-        alert(r);
-        loadAdminList(currentAdminSheet);
-      } catch(e) {
-        hideLoading(); 
-        alert("通信エラー: " + e.message);
       }
     }
 
@@ -1383,6 +1372,34 @@
       } catch(e) {
         hideLoading(); alert(e.message);
       }
+    }
+
+    // ==========================================
+    // ★追加：【ご要望②・③】R2画像リンク切れ 手動リカバリーの実行
+    // ==========================================
+    async function executeManualRecovery() {
+        let oldTmp = document.getElementById('manualRecoveryTmpInput').value.trim();
+        if(!oldTmp) return alert("古いTMP番号を入力してください。");
+        if(!oldTmp.startswith("TMP-")) return alert("TMP- から始まる番号を入力してください。");
+        
+        if(!confirm(`R2上の「${oldTmp}」の画像を、現在の管理番号「${currentEditCode}」に強制的にリネームして紐付けます。\n\nよろしいですか？`)) return;
+        
+        showLoading("R2の画像を修復中...");
+        try {
+            const r = await rpcCall('manualR2Recovery', oldTmp, currentEditCode);
+            hideLoading();
+            alert(r);
+            
+            document.getElementById('manualRecoveryTmpInput').value = "";
+            
+            // 成功したら画像を再読み込みして表示
+            document.getElementById('adminImageGallery').innerHTML = '<div style="font-size:10px; color:#666;"><span class="mini-spinner"></span>画像を取得中...</div>';
+            const res = await rpcCall('getItemImagesForAdmin', currentAdminSheet, currentEditCode);
+            renderAdminImages(res.images);
+        } catch(e) {
+            hideLoading();
+            alert("エラーが発生しました: " + e.message);
+        }
     }
     
     async function deleteItemExecute(){ 
