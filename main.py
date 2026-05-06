@@ -711,7 +711,7 @@ async def rpc_endpoint(req: Request, response: Response, background_tasks: Backg
             return {"data": "OK"}
 
         # ==========================================
-        # ★追加：新アプリ用 超緊急画像リカバリー処理
+        # ★追加：新アプリ用 超緊急画像リカバリー処理（安全重視・厳格マッチング版）
         # ==========================================
         elif method == "emergencyImageRecovery":
             # 1. データベースから「OM〜」の正規の管理番号と作成日時を取得
@@ -726,68 +726,93 @@ async def rpc_endpoint(req: Request, response: Response, background_tasks: Backg
                     if time_str.endswith("Z"):
                         time_str = time_str[:-1] + "+00:00"
                     dt = datetime.fromisoformat(time_str)
-                    ts = int(dt.timestamp() * 1000)
+                    ts = int(dt.timestamp() * 1000) # 常に13桁（ミリ秒）に統一
                     db_items.append({"code": code, "ts": ts})
                 except:
                     pass
             
-            # 2. R2から「TMP-」を含むファイルを探してリネーム
-            recovered_count = 0
+            # 2. R2から「TMP-」を含む全ファイルを取得
+            all_tmp_files = []
             continuation_token = None
-            
             while True:
                 list_kwargs = {'Bucket': BUCKET_NAME, 'Prefix': 'TMP-'}
                 if continuation_token:
                     list_kwargs['ContinuationToken'] = continuation_token
                     
                 response = s3_client.list_objects_v2(**list_kwargs)
-                if 'Contents' not in response:
-                    break
-                    
-                for obj in response['Contents']:
-                    old_key = obj['Key']
-                    m = re.search(r'TMP-(\d+)', old_key)
-                    if m:
-                        tmp_code = m.group(1) # e.g. TMP-12345678
-                        try:
-                            file_ts = int(m.group(1).replace("TMP-", ""))
-                            
-                            # 最も作成時間が近いデータベースのレコードを探す
-                            closest_item = None
-                            min_diff = float('inf')
-                            for item in db_items:
-                                diff = abs(item["ts"] - file_ts)
-                                if diff < min_diff:
-                                    min_diff = diff
-                                    closest_item = item
-                            
-                            # 時間のズレが24時間以内なら強制マッチング
-                            if closest_item and min_diff < 86400000:
-                                new_code = closest_item["code"]
-                                new_key = old_key.replace(tmp_code, new_code)
-                                
-                                try:
-                                    s3_client.copy_object(
-                                        Bucket=BUCKET_NAME,
-                                        CopySource={'Bucket': BUCKET_NAME, 'Key': old_key},
-                                        Key=new_key
-                                    )
-                                    s3_client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
-                                    recovered_count += 1
-                                except Exception as copy_err:
-                                    print("R2 Copy err:", copy_err)
-                        except:
-                            pass
+                if 'Contents' in response:
+                    for obj in response['Contents']:
+                        all_tmp_files.append(obj['Key'])
                                 
                 if response.get('IsTruncated'):
                     continuation_token = response.get('NextContinuationToken')
                 else:
                     break
-                    
-            return {"data": f"修復完了: R2サーバーに取り残されていた画像を解析し、{recovered_count}個のファイルを正規の管理番号に紐付けて救出しました！"}
-            
-        else:
-            return {"data": "OK"}
-            
-    except Exception as e:
-        return {"error": str(e)}
+
+            if not all_tmp_files:
+                return {"data": "R2サーバーに「TMP-」から始まる画像は見つかりませんでした。"}
+
+            # 3. TMPのグループ（同じタイムスタンプの画像群）ごとに安全な紐付け先を探す
+            tmp_groups = set()
+            for key in all_tmp_files:
+                m = re.search(r'TMP-(\d+)', key)
+                if m:
+                    tmp_groups.add(m.group(1))
+
+            proposed_matches = {}
+            db_code_to_tmps = {}
+
+            for tmp_str in tmp_groups:
+                file_ts_raw = int(tmp_str)
+                # 10桁と13桁の混在を吸収
+                file_ts = file_ts_raw * 1000 if len(str(file_ts_raw)) <= 10 else file_ts_raw
+                
+                closest_item = None
+                min_diff = float('inf')
+                for item in db_items:
+                    diff = abs(item["ts"] - file_ts)
+                    if diff < min_diff:
+                        min_diff = diff
+                        closest_item = item
+                
+                # ★安全性チェック1: 時間のズレが「5分 (300,000ミリ秒)」以内のみ許可
+                if closest_item and min_diff <= 300000:
+                    db_code = closest_item["code"]
+                    proposed_matches[tmp_str] = db_code
+                    if db_code not in db_code_to_tmps:
+                        db_code_to_tmps[db_code] = []
+                    db_code_to_tmps[db_code].append(tmp_str)
+
+            # ★安全性チェック2: 1つのDBデータに対して、複数のTMPが紐づこうとしている場合は危険なので除外
+            safe_matches = {}
+            for tmp_str, db_code in proposed_matches.items():
+                if len(db_code_to_tmps[db_code]) == 1:
+                    safe_matches[tmp_str] = db_code
+
+            # 4. 安全が確認されたものだけをリネーム実行
+            recovered_count = 0
+            for old_key in all_tmp_files:
+                m = re.search(r'TMP-(\d+)', old_key)
+                if m:
+                    tmp_str = m.group(1)
+                    if tmp_str in safe_matches:
+                        new_code = safe_matches[tmp_str]
+                        new_key = old_key.replace(f"TMP-{tmp_str}", new_code)
+                        try:
+                            s3_client.copy_object(
+                                Bucket=BUCKET_NAME,
+                                CopySource=f"{BUCKET_NAME}/{old_key}",
+                                Key=new_key
+                            )
+                            s3_client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
+                            recovered_count += 1
+                        except Exception as copy_err:
+                            print("R2 Copy err:", copy_err)
+
+            # 実行結果のメッセージ作成
+            skipped_groups = len(tmp_groups) - len(safe_matches)
+            msg = f"修復完了: 安全性が確実な {recovered_count}個 のファイルを正規の番号に紐付けました。"
+            if skipped_groups > 0:
+                msg += f"\n\n※安全装置作動: 別の商品と混ざるリスクがある {skipped_groups}件 の不確実な画像群は、意図的にスキップしました。"
+
+            return {"data": msg}
