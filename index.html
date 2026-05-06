@@ -11,7 +11,6 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&display=swap" rel="stylesheet">
   
-  <!-- ★削除してしまったR2（AWS S3）通信用のライブラリを復活させました -->
   <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1438.0.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
@@ -58,7 +57,6 @@
     label.title{font-weight:normal;font-size:14px;display:block;margin-bottom:4px;}
     .required{color:#d32f2f;font-size:12px;margin-left:3px;}
     
-    /* テンキーピクつき防止の固定サイズ化 */
     input[type="text"],input[type="number"],input[type="date"],select,input[type="file"],textarea{width:100%;padding:8px 10px;background:#f9f9f9;border:1px solid #ddd;border-radius:6px;font-size:16px;margin-bottom:4px;-webkit-appearance:none; height:auto; line-height:normal;}
     input:focus,select:focus,textarea:focus{background:#fff;border-color:#111;outline:none;}
     .is-filled{background:#fafafa!important;border-color:#999!important;}
@@ -77,11 +75,12 @@
     #camera-stream { width: 100%; height: 100%; object-fit: cover; }
     .shutter-btn { width: 64px; height: 64px; border-radius: 50%; background: #FF90E8; border: 4px solid #fff; outline: 3px solid #111; cursor: pointer; margin: 0 auto 5px auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
     .shutter-btn:active { transform: scale(0.9); background: #d53f8c; }
-    .preview-list { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; min-height: 70px; }
-    .preview-item { position: relative; flex-shrink: 0; cursor: grab; }
+    
+    .preview-list { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; min-height: 70px; -webkit-overflow-scrolling: touch; }
+    .preview-item { position: relative; flex-shrink: 0; cursor: grab; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-user-drag: none; }
     .preview-item:active { cursor: grabbing; }
-    .preview-img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid #111; }
-    .delete-btn-cam { position: absolute; top: -6px; right: -6px; background: #d32f2f; color: #fff; border-radius: 50%; width: 22px; height: 22px; font-size: 14px; font-weight:bold; border: 1px solid #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index:10; }
+    .preview-img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid #111; pointer-events: none; }
+    .delete-btn-cam { position: absolute; top: -6px; right: -6px; background: #d32f2f; color: #fff; border-radius: 50%; width: 22px; height: 22px; font-size: 14px; font-weight:bold; border: 1px solid #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index:10; pointer-events: auto; }
 
     .overlay-modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:2000;justify-content:center;align-items:center;padding:20px;backdrop-filter:blur(4px);}
     .modal-content{background:#fff;padding:24px;border-radius:16px;border:1px solid #111;text-align:center;width:100%;max-width:360px;max-height:90vh;overflow-y:auto;}
@@ -139,11 +138,11 @@
     #bg-status-badge{display:none;background:#111;color:#fff;padding:10px;border-radius:8px;font-size:12px;font-weight:normal;margin-bottom:15px;text-align:center;border:1px solid #111;}
     .mini-spinner{display:inline-block;width:10px;height:10px;border:2px solid #555;border-top:2px solid #fff;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;margin-right:6px;}
 
-    .admin-image-gallery { display:flex; gap:8px; overflow-x:auto; padding:4px 0 10px 0; }
-    .admin-image-item { position:relative; flex-shrink:0; cursor:grab; }
+    .admin-image-gallery { display:flex; gap:8px; overflow-x:auto; padding:4px 0 10px 0; -webkit-overflow-scrolling: touch; }
+    .admin-image-item { position:relative; flex-shrink:0; cursor:grab; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-user-drag: none; }
     .admin-image-item:active { cursor:grabbing; }
-    .admin-image-img { width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid #ddd; }
-    .admin-image-delete { position:absolute; top:-6px; right:-6px; background:#d32f2f; color:#fff; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:normal; cursor:pointer; z-index:10; }
+    .admin-image-img { width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid #ddd; pointer-events: none; }
+    .admin-image-delete { position:absolute; top:-6px; right:-6px; background:#d32f2f; color:#fff; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:normal; cursor:pointer; z-index:10; pointer-events: auto; }
   </style>
 </head>
 <body>
@@ -270,6 +269,8 @@
       <div style="text-align:center; margin-bottom:15px; display:flex; flex-direction:column; gap:10px; align-items:center;">
         <button class="modal-btn-sub" style="background:#B28DFF; color:#fff; border-color:#111; padding:10px 16px; width:90%; max-width:300px; font-size:13px; font-weight:normal; margin-top:0;" onclick="executeBulkAI()">✨ 未生成AI文章を一括生成</button>
         <button class="modal-btn-sub" style="background:#00E5FF; color:#111; border-color:#111; padding:10px 16px; width:90%; max-width:300px; font-size:13px; font-weight:normal; margin-top:0;" onclick="executeBatchDownload()">📥 画像とCSVを一括ダウンロード</button>
+        <!-- ★緊急修復ボタンを追加 -->
+        <button class="modal-btn-danger" style="border-color:#d32f2f; color:#d32f2f; padding:10px 16px; width:90%; max-width:300px; font-size:12px; font-weight:bold; margin-top:0; border-width:2px; background:#ffeeee;" onclick="executeEmergencyImageRecovery()">🚨 R2画像リンク切れ 緊急修復</button>
       </div>
       
       <div id="admin-move-panel" style="background:#fff; border:1px solid #111; padding:10px; border-radius:10px; margin-bottom:15px; display:none; flex-direction:column; gap:8px;">
@@ -472,12 +473,8 @@
   <div id="ai-running-banner" style="display:none; position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#111; color:#fff; padding:12px 20px; border-radius:30px; z-index:5000; font-size:13px; font-weight:normal; white-space:nowrap; align-items:center; gap:10px;"></div>
 
   <script>
-    // ★重要: GitHub（FastAPI）用の通信設定
-    const API_ENDPOINT = '/api/rpc'; // デプロイ先と同じドメインを想定
+    const API_ENDPOINT = '/api/rpc'; 
 
-    // ----------------------------------------------------
-    // GASの google.script.run の代わりになる汎用通信関数
-    // ----------------------------------------------------
     async function rpcCall(methodName, ...args) {
       try {
         const response = await fetch(API_ENDPOINT, {
@@ -502,7 +499,6 @@
       }
     }
 
-    // ★追加: R2(AWS S3)の初期化
     const R2_ACCOUNT_ID = 'a73ad889c944b152ede6d3329c545f8c';
     const R2_ACCESS_KEY = '92d4bcff0e4c138bdbcb0d4def85d114';
     const R2_SECRET_KEY = 'c0710a593132682ac557ab21b0c973974c0956ab49cb8d28a57aa67b7bc7c395';
@@ -635,7 +631,6 @@
       document.getElementById('imagePreviewModal').style.display = 'flex';
     }
 
-    // テンキー動作（スマホでのピクつきを防止するためfocus削除）
     function insertAtCursor(val) {
         let el = document.getElementById('numpadInput'); let start = el.selectionStart; let end = el.selectionEnd; let text = el.value;
         el.value = text.substring(0, start) + val + text.substring(end);
@@ -735,7 +730,6 @@
 
     let pendingUploadData=null; 
     
-    // ★追加: R2へのアップロードを復活
     async function startSubmissionProcess(){
       if(isUploadingBackground){alert("前の処理をお待ちください");return;}
       let b=document.getElementById('brand').value.trim(); let s=document.getElementById('statusText').value;
@@ -744,23 +738,20 @@
       if(capturedBlobs.length === 0 || !b || !sz || !cId){alert("必須項目が未入力、または写真がありません");return;}
       
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      showLoading("R2へ画像を直接送信中...");
+      showLoading("サーバー経由で通信準備中...");
 
       try {
         const res = await rpcCall('reserveNewCode', activeBatchSheet);
         let targetCode = res.code; 
 
-        // R2(S3)へアップロード
         let uploadErrors = 0;
         for (let i = 0; i < capturedBlobs.length; i++) {
             const fileName = `${targetCode}-${i + 1}.jpg`;
             const params = { Bucket: BUCKET_NAME, Key: fileName, Body: capturedBlobs[i].blob, ContentType: 'image/jpeg' };
             try { await s3.putObject(params).promise(); } catch (err) { uploadErrors++; console.error("R2 Upload Error:", err); }
         }
-        
         if (uploadErrors > 0) alert(`${uploadErrors}枚の画像送信に失敗しました。`);
 
-        // AI分析用に1枚目だけBase64化する（バックエンドの処理を軽くするため）
         const aiThumbBase64 = await new Promise(resolve => {
             const reader = new FileReader();
             reader.onloadend = () => resolve(reader.result.split(',')[1]);
@@ -973,7 +964,6 @@
     function closePackConfirmModal() { document.getElementById('packConfirmModal').style.display = 'none'; }
     function executePackPhoto() { closePackConfirmModal(); document.getElementById('packImageInput').click(); }
     
-    // ★追加: 梱包写真のR2へのアップロードを復活
     document.getElementById('packImageInput').addEventListener('change', async function(){ 
       if(!this.files.length) return; 
       showLoading("梱包写真を圧縮中..."); 
@@ -983,11 +973,9 @@
 
         showLoading("梱包完了処理中...");
         
-        // 1. 番号を確定させる
         const res = await rpcCall('savePackingPhotoAndAssignCode', currentPackCode, "DUMMY", activeBatchSheet);
         
         if(res.status === "OK") {
-           // 2. 確定した番号でR2へアップロード
            showLoading("R2へアップロード中...");
            const fileName = `${res.finalCode}_packing.jpg`;
            const params = { Bucket: BUCKET_NAME, Key: fileName, Body: blob, ContentType: 'image/jpeg' };
@@ -1175,6 +1163,24 @@
       }
     }
 
+    // ==========================================
+    // ★追加：新アプリ用 超緊急画像リカバリー機能
+    // ==========================================
+    async function executeEmergencyImageRecovery() {
+      if(!confirm("【緊急修復】\nクラウド上(R2)に古い「TMP-」の名前のまま取り残されている画像ファイルを検索し、データベースと照合して「正式な管理番号」に一括で紐付け・修正します。\n\n実行しますか？（※数分かかる場合があります）")) return;
+      
+      showLoading("R2サーバーの画像を自動修復中...");
+      try {
+        const r = await rpcCall('emergencyImageRecovery');
+        hideLoading();
+        alert(r);
+        loadAdminList(currentAdminSheet);
+      } catch(e) {
+        hideLoading(); 
+        alert("通信エラー: " + e.message);
+      }
+    }
+
     let currentEditCode="";
     async function openEditModal(c,isP,ds,errReason){ 
       currentEditCode=c; let d=JSON.parse(decodeURIComponent(ds)); 
@@ -1251,7 +1257,6 @@
       }
     }
 
-    // ★追加: R2への一括アップロードを復活
     async function executeBulkReplaceImages(input) {
       if(!input.files || input.files.length === 0) return;
       if(!confirm("現在の【商品画像】をすべて削除し、選択した画像で上書きします。\nよろしいですか？\n（※梱包写真は削除されません）")) { input.value = ""; return; }
@@ -1299,7 +1304,6 @@
       }
     }
 
-    // ★追加: R2への追加アップロードを復活
     async function uploadExtraImagesAdmin(input) {
       if(!input.files || input.files.length === 0) return;
       showLoading("画像を圧縮して送信中...");
