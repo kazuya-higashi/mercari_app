@@ -4,3 +4,4 @@ supabase
 requests
 pydantic
 gunicorn
+boto3
